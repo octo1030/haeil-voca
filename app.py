@@ -85,9 +85,8 @@ nav_items = [("🧠", "QUIZ"), ("📚", "Voca"), ("📊", "Stat"), ("➕", "Add"
 
 for i, (icon, label) in enumerate(nav_items):
     with nav_cols[i]:
-        # 현재 활성화된 메뉴인지 확인
         is_active = st.session_state.menu == label
-        # 활성 메뉴는 파란색(primary), 나머지는 기본색(secondary)
+        # label이 길면 모바일에서 잘릴 수 있으니 icon과 label을 조합
         if st.button(f"{icon}\n{label}", key=f"nav_{label}", 
                      use_container_width=True, 
                      type="primary" if is_active else "secondary"):
