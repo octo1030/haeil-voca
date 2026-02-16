@@ -23,45 +23,45 @@ st.set_page_config(page_title="Haeil's Voca", layout="centered")
 
 st.markdown("""
     <style>
-    /* 1️⃣ 사이드바 제거 */
+
+    /* 🔥 사이드바 제거 */
     [data-testid="stSidebar"] { display: none; }
 
-    /* 2️⃣ 상단 네비게이션 완전 고정 4등분 */
+    /* 🔥 상단 네비 래퍼 */
     div[data-testid="stHorizontalBlock"] {
-        display: flex !important;
-        flex-direction: row !important;
-        flex-wrap: nowrap !important;
-        gap: 2px !important;
-        width: 100% !important;
+        gap: 4px !important;
     }
 
-    /* column 내부 기본 padding 완전 제거 */
+    /* 🔥 컬럼 완전 초기화 */
     div[data-testid="column"] {
         padding: 0 !important;
         margin: 0 !important;
+        flex: 1 1 0% !important;   /* 핵심 */
+        min-width: 0 !important;   /* 넘침 방지 */
     }
 
-    /* 4등분 정확 고정 */
-    div[data-testid="column"] > div {
-        width: 100% !important;
-    }
-
-    /* 버튼 완전 압축 */
+    /* 🔥 버튼 완전 압축 */
     .stButton > button {
         width: 100% !important;
-        padding: 2px 0 !important;
-        font-size: 10px !important;
-        height: 42px !important;
-        border-radius: 6px !important;
+        height: 44px !important;
+        padding: 4px 0 !important;
+        font-size: 11px !important;
+        border-radius: 10px !important;
         box-sizing: border-box !important;
     }
 
-    /* 버튼 내부 텍스트 줄바꿈 방지 + 넘침 방지 */
+    /* 🔥 버튼 텍스트 */
     .stButton div[data-testid="stMarkdownContainer"] p {
-        font-size: 10px !important;
+        font-size: 11px !important;
         line-height: 1.0 !important;
-        white-space: nowrap !important;
         margin: 0 !important;
+        white-space: nowrap !important;
+    }
+
+    /* 🔥 상단 여백 줄이기 */
+    .main .block-container {
+        padding-top: 0.8rem !important;
+        padding-bottom: 100px !important;
     }
             
     /* 3. 듀오링고 스타일 퀴즈 카드 */
@@ -106,6 +106,7 @@ if 'menu' not in st.session_state: st.session_state.menu = "QUIZ"
 if 'quiz_state' not in st.session_state: st.session_state.quiz_state = 'setup'
 
 # ---------- 상단 네비게이션 (완전 안정형) ----------
+nav_cols = st.columns([1,1,1,1])
 
 nav_items = [
     ("🧠", "QUIZ"),
@@ -114,55 +115,17 @@ nav_items = [
     ("➕", "Add")
 ]
 
-# CSS (네비 전용)
-st.markdown("""
-<style>
-.top-nav {
-    display: flex;
-    width: 100%;
-    gap: 4px;
-}
-
-.top-nav button {
-    flex: 1;
-    height: 44px;
-    font-size: 11px;
-    border-radius: 8px;
-    border: 1px solid #ddd;
-    background: white;
-}
-
-.top-nav button.active {
-    background: #ff4b4b;
-    color: white;
-    border: none;
-}
-</style>
-""", unsafe_allow_html=True)
-
-
-# 버튼 렌더링
-nav_html = '<div class="top-nav">'
-
-for icon, label in nav_items:
-    active_class = "active" if st.session_state.menu == label else ""
-    nav_html += f"""
-        <form action="" method="post">
-            <button name="nav" value="{label}" class="{active_class}">
-                {icon}<br>{label}
-            </button>
-        </form>
-    """
-
-nav_html += "</div>"
-
-nav_clicked = st.components.v1.html(nav_html, height=60)
-
-# 클릭 처리
-query_params = st.query_params
-if "nav" in query_params:
-    st.session_state.menu = query_params["nav"]
-    st.rerun()
+for i, (icon, label) in enumerate(nav_items):
+    with nav_cols[i]:
+        is_active = st.session_state.menu == label
+        if st.button(
+            f"{icon}\n{label}",
+            key=f"nav_{label}",
+            use_container_width=True,
+            type="primary" if is_active else "secondary"
+        ):
+            st.session_state.menu = label
+            st.rerun()
 
 
 # --- [QUIZ 메뉴] 듀오링고 스타일 ---
