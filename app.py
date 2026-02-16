@@ -7,7 +7,7 @@ import re
 import time
 from openai import OpenAI
 
-# [1] 시스템 설정
+# [1] 시스템 및 연결 설정
 os.environ["PYTHONIOENCODING"] = "utf-8"
 conn = st.connection("gsheets", type=GSheetsConnection)
 
@@ -52,22 +52,25 @@ def generate_content(word):
         st.error(f"🚨 GPT 오류: {e}")
     return None, None
 
-# [4] 앱 설정 및 스타일 (모바일 최적화 CSS 추가)
+# [4] 앱 설정 및 모바일 최적화 CSS
 st.set_page_config(page_title="Haeil's Smart Voca", page_icon="🏎️", layout="wide")
 
 st.markdown("""
     <style>
-    /* 단어장 리스트 여백 축소 */
-    .word-row { font-size: 14px; border-bottom: 1px solid #eee; padding: 5px 0; }
-    /* 모바일에서 버튼 크기 조정 */
-    .stButton button { width: 100%; }
+    /* 컬럼 간격 최소화 */
+    [data-testid="column"] { padding: 0 5px !important; }
+    /* 모바일 글자 크기 최적화 */
+    .mobile-text { font-size: 13px !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .stat-text { font-size: 11px !important; color: #666; }
+    /* 버튼 내부 여백 축소 */
+    div.stButton > button { padding: 2px 5px !important; height: 30px !important; }
     </style>
     """, unsafe_allow_html=True)
 
 if 'menu_selection' not in st.session_state: st.session_state.menu_selection = "새 단어 추가"
 if 'quiz_state' not in st.session_state: st.session_state.quiz_state = 'setup'
 
-# --- 사이드바 메뉴 (자동 접힘 JS 추가) ---
+# --- 사이드바 메뉴 (강력한 자동 접힘 스크립트) ---
 with st.sidebar:
     st.title("🚀 Haeil's Voca")
     st.divider()
@@ -76,11 +79,16 @@ with st.sidebar:
         label = f"**[ {page} ]**" if st.session_state.menu_selection == page else page
         if st.button(label, use_container_width=True, key=f"menu_{page}"):
             st.session_state.menu_selection = page
-            # [JS] 모바일에서 메뉴 클릭 시 사이드바를 자동으로 닫는 마법
+            # [JS 고도화] 여러 형태의 닫기 버튼을 찾아 강제로 클릭합니다.
             st.components.v1.html("""
                 <script>
-                var nextButton = window.parent.document.querySelector('button[kind="headerNoPadding"]');
-                if (nextButton) nextButton.click();
+                const sidebar = window.parent.document.querySelector('section[data-testid="stSidebar"]');
+                const closeButton = window.parent.document.querySelector('button[aria-label="Close"]');
+                if (closeButton) { closeButton.click(); }
+                else {
+                    const overlay = window.parent.document.querySelector('div[data-testid="stSidebarCollapseByDrag"]');
+                    if (overlay) overlay.click();
+                }
                 </script>
                 """, height=0)
             st.rerun()
@@ -108,7 +116,7 @@ if menu == "새 단어 추가":
                             save_data(df)
                             st.success(f"🎉 '{word}' 저장 완료!")
 
-# --- 메뉴 2: 단어장 보기 (모바일 최적화 한 줄 보기) ---
+# --- 메뉴 2: 단어장 보기 (한 줄 레이아웃 및 Count 부활) ---
 elif menu == "단어장 보기":
     st.header("📚 나의 단어장")
     df = load_data()
@@ -118,25 +126,30 @@ elif menu == "단어장 보기":
             save_data(df); st.rerun()
         
         st.divider()
-        # [모바일 최적화] HTML 테이블 형식으로 한 줄 표시
+        # 헤더 라인
+        h1, h2, h3, h4 = st.columns([2.5, 3.5, 3, 1])
+        h1.caption("단어")
+        h2.caption("뜻")
+        h3.caption("기록 (횟수/%)")
+        h4.caption("삭제")
+
         for idx, row in df.iterrows():
-            total = int(row['count'])
-            rate = ((total - int(row['mistakes'])) / total * 100) if total > 0 else 0
+            # 데이터 로드
+            cnt = int(row['count'])
+            mis = int(row['mistakes'])
+            rate = ((cnt - mis) / cnt * 100) if cnt > 0 else 0
             
-            col_text, col_del = st.columns([6, 1])
-            with col_text:
-                # 테이블 태그를 이용해 간격 유지 및 한 줄 표시
-                st.markdown(f"""
-                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding: 8px 0;">
-                    <div style="flex: 1; font-weight: bold;">{idx+1}. {row['word']}</div>
-                    <div style="flex: 1.5; font-size: 14px; color: #666;">{row['meaning']}</div>
-                    <div style="flex: 0.8; text-align: right; font-size: 13px; color: #007bff;">{rate:.0f}%</div>
-                </div>
-                """, unsafe_allow_html=True)
-            with col_del:
+            # 한 줄 컬럼 배치
+            c1, c2, c3, c4 = st.columns([2.5, 3.5, 3, 1])
+            
+            with c1: st.markdown(f"<div class='mobile-text'><b>{row['word']}</b></div>", unsafe_allow_html=True)
+            with c2: st.markdown(f"<div class='mobile-text'>{row['meaning']}</div>", unsafe_allow_html=True)
+            with c3: st.markdown(f"<div class='stat-text'>{cnt}회 | {rate:.0f}%</div>", unsafe_allow_html=True)
+            with c4:
                 if st.button("🗑️", key=f"del_{idx}"):
                     df = df.drop(idx)
                     save_data(df); st.rerun()
+            st.markdown("<hr style='margin: 5px 0; border: none; border-top: 1px solid #f0f0f0;'>", unsafe_allow_html=True)
     else: st.info("등록된 단어가 없습니다.")
 
 # --- 메뉴 3: QUIZ!! ---
@@ -151,7 +164,6 @@ elif menu == "QUIZ!!":
             st.subheader("🏁 QUIZ SETTING")
             num_q = st.selectbox("문제 수", [5, 10, 20])
             if st.button("🚀 QUIZ START!", use_container_width=True):
-                # 8:2 하이브리드 추출 로직
                 incorrect = df[df['mistakes'] > 0]
                 new_words = df[df['mistakes'] == 0]
                 n_inc = min(len(incorrect), int(num_q * 0.2))
@@ -179,7 +191,6 @@ elif menu == "QUIZ!!":
         row = st.session_state.quiz_pool[q_idx]
         word, raw_sentence = str(row['word']), row['selected_sentence']
         
-        # 포커스 JS
         st.components.v1.html(f"""<script>
             var f = () => {{ var i = window.parent.document.querySelectorAll('input[type="text"]'); if(i.length>0) i[i.length-1].focus(); }};
             setTimeout(f, 300);
@@ -196,7 +207,6 @@ elif menu == "QUIZ!!":
             user_ans = st.text_input("정답 입력", label_visibility="collapsed", key=f"in_{q_idx}").strip()
             if st.form_submit_button("제출 (Enter)", use_container_width=True):
                 is_correct = user_ans.lower() == word.lower()
-                # [수정] 사용자가 입력한 오답(user_ans)을 결과에 추가 저장
                 st.session_state.results.append({
                     "word": word, 
                     "user_ans": user_ans, 
@@ -211,6 +221,8 @@ elif menu == "QUIZ!!":
                 st.session_state.current_q_idx += 1
                 if st.session_state.current_q_idx >= st.session_state.total_q: st.session_state.quiz_state = 'finished'
                 st.rerun()
+
+        if st.button("🏠 퀴즈 중단"): st.session_state.quiz_state = 'setup'; st.rerun()
 
     elif st.session_state.quiz_state == 'finished':
         st.header("🏆 QUIZ REPORT")
@@ -230,7 +242,6 @@ elif menu == "QUIZ!!":
             with st.container(border=True):
                 icon = "⭕" if res['is_correct'] else "❌"
                 st.markdown(f"### {icon} {res['word']}")
-                # [수정] 오답일 경우 내가 쓴 답 표시
                 if not res['is_correct']:
                     st.markdown(f"<span style='color:red;'>Your Answer: {res['user_ans']}</span>", unsafe_allow_html=True)
                 
