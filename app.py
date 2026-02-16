@@ -105,21 +105,65 @@ st.markdown("""
 if 'menu' not in st.session_state: st.session_state.menu = "QUIZ"
 if 'quiz_state' not in st.session_state: st.session_state.quiz_state = 'setup'
 
-# 상단 네비게이션 레이아웃
-nav_cols = st.columns([1,1,1,1])
-nav_items = [("🧠", "QUIZ"), ("📚", "Voca"), ("📊", "Stat"), ("➕", "Add")]
+# ---------- 상단 네비게이션 (완전 안정형) ----------
 
-for i, (icon, label) in enumerate(nav_items):
-    with nav_cols[i]:
-        is_active = st.session_state.menu == label
-        # 모바일 가로 유지를 위해 use_container_width=True 유지
-        if st.button(f"{icon}\n{label}", key=f"nav_{label}", 
-                     use_container_width=True, 
-                     type="primary" if is_active else "secondary"):
-            st.session_state.menu = label
-            st.rerun()
+nav_items = [
+    ("🧠", "QUIZ"),
+    ("📚", "Voca"),
+    ("📊", "Stat"),
+    ("➕", "Add")
+]
 
-st.divider()
+# CSS (네비 전용)
+st.markdown("""
+<style>
+.top-nav {
+    display: flex;
+    width: 100%;
+    gap: 4px;
+}
+
+.top-nav button {
+    flex: 1;
+    height: 44px;
+    font-size: 11px;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+    background: white;
+}
+
+.top-nav button.active {
+    background: #ff4b4b;
+    color: white;
+    border: none;
+}
+</style>
+""", unsafe_allow_html=True)
+
+
+# 버튼 렌더링
+nav_html = '<div class="top-nav">'
+
+for icon, label in nav_items:
+    active_class = "active" if st.session_state.menu == label else ""
+    nav_html += f"""
+        <form action="" method="post">
+            <button name="nav" value="{label}" class="{active_class}">
+                {icon}<br>{label}
+            </button>
+        </form>
+    """
+
+nav_html += "</div>"
+
+nav_clicked = st.components.v1.html(nav_html, height=60)
+
+# 클릭 처리
+query_params = st.query_params
+if "nav" in query_params:
+    st.session_state.menu = query_params["nav"]
+    st.rerun()
+
 
 # --- [QUIZ 메뉴] 듀오링고 스타일 ---
 if st.session_state.menu == "QUIZ":
