@@ -26,39 +26,44 @@ st.markdown("""
     /* 1. 사이드바 제거 */
     [data-testid="stSidebar"] { display: none; }
     
-    /* 2. 모바일 가로 4열 강제 고정 (핵심 수정) */
+    /* 2. 모바일 가로 4열 강제 고정 (화면 탈출 방지 버전) */
     div[data-testid="stHorizontalBlock"] {
         display: flex !important;
-        flex-direction: row !important; /* 세로 정렬 방지 */
-        flex-wrap: nowrap !important;   /* 줄바꿈 방지 */
+        flex-direction: row !important;
+        flex-wrap: nowrap !important;
         width: 100% !important;
-        gap: 5px !important;            /* 버튼 사이 간격 최소화 */
+        gap: 2px !important;            /* 간격을 더 줄임 */
+        overflow: hidden !important;    /* 화면 밖 탈출 방지 */
     }
 
     div[data-testid="column"] {
-        flex: 1 1 0% !important;        /* 모든 컬럼이 동일한 너비 점유 */
-        min-width: 0px !important;      /* 모바일 100% 폭 방지 */
-        max-width: 25% !important;      /* 4등분 유지 */
+        flex: 1 1 0% !important;        /* 남은 공간을 무조건 1/4씩 점유 */
+        min-width: 0px !important;      /* 최소 너비 제한 해제 (핵심) */
+        width: 24% !important;          /* 25%보다 살짝 작게 설정하여 여유 확보 */
     }
 
-    /* 버튼 스타일: 콤팩트한 사각형 유지 */
+    /* 버튼 스타일: 텍스트가 넘치지 않도록 강제 압축 */
     .stButton > button {
         width: 100% !important;
-        padding: 0px !important;        /* 내부 여백 제거 */
-        font-size: 11px !important;     /* 글자 크기 축소 */
-        height: 50px !important;        /* 높이 고정 */
-        border-radius: 8px !important;
+        min-width: 0px !important;      /* 버튼 자체의 최소 너비도 해제 */
+        padding: 0px 2px !important;    /* 좌우 패딩 최소화 */
+        font-size: 10px !important;     /* 글자 크기를 10px로 더 축소 */
+        height: 48px !important;        /* 높이 소폭 조정 */
+        border-radius: 6px !important;
+        overflow: hidden !important;    /* 텍스트가 길면 숨김 처리 */
         display: flex !important;
         flex-direction: column !important;
+        align-items: center !important;
         justify-content: center !important;
     }
 
-    /* 버튼 내 아이콘과 텍스트 간격 조정 */
+    /* 버튼 내 아이콘과 텍스트가 겹치지 않게 조절 */
     .stButton div p {
         margin: 0 !important;
-        line-height: 1.2 !important;
+        line-height: 1.0 !important;
+        word-break: break-all !important; /* 글자가 길면 강제 줄바꿈 */
     }
-    
+            
     /* 3. 듀오링고 스타일 퀴즈 카드 */
     .quiz-card {
         background: white;
