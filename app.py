@@ -18,7 +18,7 @@ def save_data(df): conn.update(data=df)
 api_key = st.secrets.get("OPENAI_API_KEY", "").strip()
 client = OpenAI(api_key=api_key)
 
-# [3] 모바일 하단 네비 및 듀오링고 스타일 CSS
+# [3] 모바일 최적화 및 강제 가로 네비게이션 CSS
 st.set_page_config(page_title="Haeil's Voca", layout="centered")
 
 st.markdown("""
@@ -26,19 +26,37 @@ st.markdown("""
     /* 1. 사이드바 제거 */
     [data-testid="stSidebar"] { display: none; }
     
-    /* 2. 메뉴 가로 정렬 강제 (모바일 대응 핵심) */
-    [data-testid="column"] {
-        width: 25% !important;          /* 4등분 */
-        min-width: 0px !important;      /* 모바일에서 최소 너비 해제 */
-        flex-basis: 25% !important;
-    }   
+    /* 2. 모바일 가로 4열 강제 고정 (핵심 수정) */
+    div[data-testid="stHorizontalBlock"] {
+        display: flex !important;
+        flex-direction: row !important; /* 세로 정렬 방지 */
+        flex-wrap: nowrap !important;   /* 줄바꿈 방지 */
+        width: 100% !important;
+        gap: 5px !important;            /* 버튼 사이 간격 최소화 */
+    }
 
-    /* 버튼 내부 텍스트 최적화 */
+    div[data-testid="column"] {
+        flex: 1 1 0% !important;        /* 모든 컬럼이 동일한 너비 점유 */
+        min-width: 0px !important;      /* 모바일 100% 폭 방지 */
+        max-width: 25% !important;      /* 4등분 유지 */
+    }
+
+    /* 버튼 스타일: 콤팩트한 사각형 유지 */
     .stButton > button {
         width: 100% !important;
-        padding: 2px 0px !important;    /* 상하 여백 축소 */
-        font-size: 12px !important;     /* 모바일 시야 확보를 위해 12px 추천 */
-        height: 45px !important;        /* 버튼 높이 고정 */
+        padding: 0px !important;        /* 내부 여백 제거 */
+        font-size: 11px !important;     /* 글자 크기 축소 */
+        height: 50px !important;        /* 높이 고정 */
+        border-radius: 8px !important;
+        display: flex !important;
+        flex-direction: column !important;
+        justify-content: center !important;
+    }
+
+    /* 버튼 내 아이콘과 텍스트 간격 조정 */
+    .stButton div p {
+        margin: 0 !important;
+        line-height: 1.2 !important;
     }
     
     /* 3. 듀오링고 스타일 퀴즈 카드 */
@@ -56,12 +74,12 @@ st.markdown("""
     
     /* 4. 진행바 커스텀 */
     .stProgress > div > div > div > div {
-        background-color: #58cc02 !important; /* 듀오링고 그린 */
+        background-color: #58cc02 !important;
         height: 12px !important;
         border-radius: 10px;
     }
     
-    /* 5. 단어장 미니멀리즘 (삭제 버튼 숨김 상태) */
+    /* 5. 단어장 미니멀리즘 */
     .word-item {
         padding: 15px;
         border-bottom: 1px solid #f0f0f0;
@@ -70,8 +88,8 @@ st.markdown("""
         align-items: center;
     }
     
-    /* 메인 컨텐츠 여백 (하단 바 때문) */
-    .main .block-container { padding-bottom: 100px; }
+    /* 메인 컨텐츠 상단 여백 보정 */
+    .main .block-container { padding-top: 1.5rem !important; padding-bottom: 100px; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -79,14 +97,14 @@ st.markdown("""
 if 'menu' not in st.session_state: st.session_state.menu = "QUIZ"
 if 'quiz_state' not in st.session_state: st.session_state.quiz_state = 'setup'
 
-# 하단 네비게이션 구현 (HTML/JS 대신 Streamlit columns로 모바일 최적화)
+# 상단 네비게이션 레이아웃
 nav_cols = st.columns(4)
 nav_items = [("🧠", "QUIZ"), ("📚", "Voca"), ("📊", "Stat"), ("➕", "Add")]
 
 for i, (icon, label) in enumerate(nav_items):
     with nav_cols[i]:
         is_active = st.session_state.menu == label
-        # label이 길면 모바일에서 잘릴 수 있으니 icon과 label을 조합
+        # 모바일 가로 유지를 위해 use_container_width=True 유지
         if st.button(f"{icon}\n{label}", key=f"nav_{label}", 
                      use_container_width=True, 
                      type="primary" if is_active else "secondary"):
