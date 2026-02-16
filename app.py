@@ -28,18 +28,17 @@ st.markdown("""
     
     /* 2. 메뉴 가로 정렬 강제 (모바일 대응 핵심) */
     [data-testid="column"] {
-        width: 25% !important;
-        flex: 1 1 25% !important;
-        min-width: 20% !important;
-    }
-    
-    /* 버튼 내부 텍스트 및 간격 최적화 */
+        width: 25% !important;          /* 4등분 */
+        min-width: 0px !important;      /* 모바일에서 최소 너비 해제 */
+        flex-basis: 25% !important;
+    }   
+
+    /* 버튼 내부 텍스트 최적화 */
     .stButton > button {
         width: 100% !important;
-        padding: 5px 0px !important;
-        font-size: 13px !important;  /* 폰트 살짝 축소 */
-        white-space: pre-wrap !important;
-        line-height: 1.2 !important;
+        padding: 2px 0px !important;    /* 상하 여백 축소 */
+        font-size: 12px !important;     /* 모바일 시야 확보를 위해 12px 추천 */
+        height: 45px !important;        /* 버튼 높이 고정 */
     }
     
     /* 3. 듀오링고 스타일 퀴즈 카드 */
@@ -102,7 +101,7 @@ if st.session_state.menu == "QUIZ":
     if st.session_state.quiz_state == 'setup':
         st.subheader("🏁 Ready for Quiz?")
         df = load_data()
-        num_q = st.select_slider("How many words?", options=[5, 10, 15, 20, 30, 50])
+        num_q = st.select_slider("How many words?", options=[5, 10, 15, 20, 30, 50], value = 10)
         if st.button("START", use_container_width=True, type="primary"):
             # 8:2 하이브리드 로직 (기존 검증된 로직 유지)
             incorrect = df[df['mistakes'] > 0]
