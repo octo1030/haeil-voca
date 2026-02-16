@@ -272,10 +272,10 @@ elif st.session_state.menu == "Stat":
             
         col2.metric("전체 정답률", f"{correct_rate}%")
         
-        st.subheader("🔥 오답률 높은 단어 (Top 5)")
+        st.subheader("🔥 오답률 높은 단어 (Top 10)")
         # 오답률 계산 및 표시
         df['rate'] = ((df['mistakes'] / df['count'].replace(0, 1)) * 100).fillna(0).astype(int)
-        bad_words = df[df['count'] > 0].sort_values('rate', ascending=False).head(5)
+        bad_words = df[df['count'] > 0].sort_values('rate', ascending=False).head(10)
         
         if not bad_words.empty:
             # 테이블 표시 시 숫자들을 정수로 변환하여 출력
