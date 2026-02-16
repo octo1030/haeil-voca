@@ -21,49 +21,56 @@ client = OpenAI(api_key=api_key)
 # [3] 모바일 최적화 및 아이폰 15 프로 전용 가로 고정 CSS
 st.set_page_config(page_title="Haeil's Voca", layout="centered")
 
+# ✅ 세션 초기화 (무조건 여기)
+if "menu" not in st.session_state:
+    st.session_state["menu"] = "QUIZ"
+
+if "quiz_state" not in st.session_state:
+    st.session_state["quiz_state"] = "setup"
+
+
+def reset_quiz():
+    for key in [
+        "quiz_state",
+        "quiz_pool",
+        "current_idx",
+        "temp_score",
+        "word_index_map",
+        "full_df"
+    ]:
+        if key in st.session_state:
+            del st.session_state[key]
+
+    st.session_state.quiz_state = "setup"
+
+
+# ✅ 메뉴 변경 감지용
+if "prev_menu" not in st.session_state:
+    st.session_state.prev_menu = st.session_state.menu
+
+# 메뉴가 바뀌면 자동으로 햄버거 닫기
+if st.session_state.prev_menu != st.session_state.menu:
+    st.session_state.menu_open = False
+    st.session_state.prev_menu = st.session_state.menu
+
+    
+
+
 st.markdown("""
     <style>
-    /* 1. 사이드바 및 기본 패딩 제거 */
-    [data-testid="stSidebar"] { display: none; }
+    .bottom-nav {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        background: white;
+        padding: 8px 0;
+        border-top: 1px solid #eee;
+        z-index: 999;
+    }
+
     .main .block-container {
-        padding: 1rem 10px !important; 
-        max-width: 100% !important;
-    }
-
-    /* 2. 가로 4열 그리드 강제 고정 (아이폰 탈출 방지 핵심) */
-    .nav-wrapper {
-        display: grid !important;
-        grid-template-columns: repeat(4, 1fr) !important; /* 무조건 4등분 */
-        gap: 6px !important;
-        width: 100% !important;
-        margin-bottom: 20px !important;
-    }
-
-    /* 스트림릿 버튼 기본 스타일 덮어쓰기 */
-    div[data-testid="column"] {
-        width: 100% !important;
-        flex: 1 1 0% !important;
-        min-width: 0 !important;
-    }
-
-    .stButton > button {
-        width: 100% !important;
-        height: 52px !important;
-        padding: 0 !important;
-        font-size: 11px !important;
-        border-radius: 10px !important;
-        display: flex !important;
-        flex-direction: column !important;
-        align-items: center !important;
-        justify-content: center !important;
-        line-height: 1.2 !important;
-    }
-
-    /* 버튼 안의 텍스트 줄바꿈 방지 */
-    .stButton p {
-        margin: 0 !important;
-        white-space: nowrap !important;
-        font-size: 11px !important;
+        padding-bottom: 70px !important;
     }
     
     /* 퀴즈 카드 등 기타 스타일 */
@@ -79,23 +86,34 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # [4] 네비게이션 로직 (ValueError 해결 및 가로 고정)
-if 'menu' not in st.session_state: st.session_state.menu = "QUIZ"
-if 'quiz_state' not in st.session_state: st.session_state.quiz_state = 'setup'
+# =========================
+# 🍔 햄버거 네비게이션
+# =========================
 
-# 가로 정렬을 위한 컨테이너 생성
-nav_items = [("🧠", "QUIZ"), ("📚", "Voca"), ("📊", "Stat"), ("➕", "Add")]
-nav_cols = st.columns(4) # 리스트 [1,1,1,1] 대신 숫자 4를 넣어 기본 분할 사용
+with st.expander("☰ Menu", expanded=False):
 
-for i, (icon, label) in enumerate(nav_items):
-    with nav_cols[i]:
-        is_active = st.session_state.menu == label
-        # 버튼 내부 텍스트 구성: 아이콘과 라벨을 결합
-        if st.button(f"{icon}\n{label}", key=f"nav_{label}", use_container_width=True, 
-                     type="primary" if is_active else "secondary"):
-            st.session_state.menu = label
-            st.rerun()
+    if st.button("🧠 QUIZ", use_container_width=True):
+        st.session_state["menu"] = "QUIZ"
+        reset_quiz()
+        st.rerun()
 
-st.divider()
+    if st.button("📚 Voca", use_container_width=True):
+        st.session_state["menu"] = "Voca"
+        reset_quiz()
+        st.rerun()
+
+    if st.button("📊 Stat", use_container_width=True):
+        st.session_state["menu"] = "Stat"
+        reset_quiz()
+        st.rerun()
+
+    if st.button("➕ Add", use_container_width=True):
+        st.session_state["menu"] = "Add"
+        reset_quiz()
+        st.rerun()
+
+
+
 
 # --- [QUIZ 메뉴] 듀오링고 스타일 ---
 if st.session_state.menu == "QUIZ":
@@ -113,11 +131,30 @@ if st.session_state.menu == "QUIZ":
                 v_sents = [item[f's{i}'] for i in range(1, 11) if pd.notna(item[f's{i}'])]
                 item['sel_sent'] = random.choice(v_sents) if v_sents else "No sentence."
             st.session_state.quiz_pool = pool
+            st.session_state.full_df = df.copy()
+
+            # 🔥 단어 → 인덱스 맵 (초고속 접근용)
+            st.session_state.word_index_map = {
+                word: idx for idx, word in enumerate(df['word'])
+            }
+
+            # 🔥 퀴즈 중 임시 점수 저장 (구글시트 접근 안함)
+            st.session_state.temp_score = {
+                word: {"count": 0, "mistakes": 0}
+                for word in df['word']
+            }
+
             st.session_state.current_idx = 0
             st.session_state.quiz_state = 'playing'
             st.rerun()
 
+
     elif st.session_state.quiz_state == 'playing':
+        if st.button("🏠 Quit Quiz", use_container_width=True):
+            reset_quiz()
+            st.session_state.menu = "QUIZ"
+            st.rerun()
+
         q_idx = st.session_state.current_idx
         row = st.session_state.quiz_pool[q_idx]
         
@@ -141,14 +178,13 @@ if st.session_state.menu == "QUIZ":
 
                 is_correct = ans.lower() == row['word'].lower()
 
-                df = load_data()
+                df = st.session_state.full_df
                 df.loc[df['word'] == row['word'], 'count'] = int(df.loc[df['word'] == row['word'], 'count']) + 1
                 if not is_correct:
                     df.loc[df['word'] == row['word'], 'mistakes'] = int(df.loc[df['word'] == row['word'], 'mistakes']) + 1
                 save_data(df)
 
                 if is_correct:
-                    st.balloons()
                     st.success("Awesome!")
                 else:
                     st.error(f"Keep trying! It's '{row['word']}'")
@@ -157,8 +193,21 @@ if st.session_state.menu == "QUIZ":
 
                 st.session_state.current_idx += 1
                 if st.session_state.current_idx >= len(st.session_state.quiz_pool):
+
+                    # 🔥 여기서 한 번만 실제 DataFrame 반영
+                    df = st.session_state.full_df
+
+                    for word, score in st.session_state.temp_score.items():
+                        idx = st.session_state.word_index_map[word]
+                        df.at[idx, 'count'] += score['count']
+                        df.at[idx, 'mistakes'] += score['mistakes']
+
+                    # 🔥 구글시트 저장은 단 1번
+                    save_data(df)
+
                     st.session_state.quiz_state = 'setup'
                     st.session_state.menu = "Stat"
+
 
                 st.rerun()
 
