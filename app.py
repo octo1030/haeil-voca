@@ -52,42 +52,65 @@ def generate_content(word):
         st.error(f"🚨 GPT 오류: {e}")
     return None, None
 
-# [4] 앱 설정 및 모바일 최적화 CSS
+# [4] 앱 설정 및 모바일 강제 고정 CSS
 st.set_page_config(page_title="Haeil's Smart Voca", page_icon="🏎️", layout="wide")
 
 st.markdown("""
     <style>
-    /* 컬럼 간격 최소화 */
-    [data-testid="column"] { padding: 0 5px !important; }
-    /* 모바일 글자 크기 최적화 */
-    .mobile-text { font-size: 13px !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .stat-text { font-size: 11px !important; color: #666; }
-    /* 버튼 내부 여백 축소 */
-    div.stButton > button { padding: 2px 5px !important; height: 30px !important; }
+    /* 1. 모바일에서 컬럼이 아래로 떨어지는(Stack) 현상 강제 방지 */
+    [data-testid="stHorizontalBlock"] {
+        flex-wrap: nowrap !important;
+        align-items: center !important;
+        gap: 0.3rem !important;
+    }
+    [data-testid="column"] {
+        min-width: 0px !important;
+        flex-shrink: 1 !important;
+    }
+    
+    /* 2. 글자 크기 및 줄바꿈 방지 */
+    .mobile-word { font-size: 14px !important; font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .mobile-mean { font-size: 13px !important; color: #555; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .mobile-stat { font-size: 10px !important; color: #007bff; white-space: nowrap; line-height: 1.2; }
+    
+    /* 3. 삭제 버튼 컴팩트화 */
+    div.stButton > button {
+        padding: 2px 5px !important;
+        font-size: 12px !important;
+        height: auto !important;
+        width: 100% !important;
+    }
+    
+    /* 4. 구분선 여백 최적화 */
+    hr { margin: 0.5rem 0 !important; }
     </style>
     """, unsafe_allow_html=True)
 
 if 'menu_selection' not in st.session_state: st.session_state.menu_selection = "새 단어 추가"
 if 'quiz_state' not in st.session_state: st.session_state.quiz_state = 'setup'
 
-# --- 사이드바 메뉴 (강력한 자동 접힘 스크립트) ---
+# --- 사이드바 메뉴 (강제 닫기 스크립트 보강) ---
 with st.sidebar:
     st.title("🚀 Haeil's Voca")
     st.divider()
     pages = ["새 단어 추가", "단어장 보기", "QUIZ!!"]
     for page in pages:
-        label = f"**[ {page} ]**" if st.session_state.menu_selection == page else page
+        is_selected = st.session_state.menu_selection == page
+        label = f"**[ {page} ]**" if is_selected else page
         if st.button(label, use_container_width=True, key=f"menu_{page}"):
             st.session_state.menu_selection = page
-            # [JS 고도화] 여러 형태의 닫기 버튼을 찾아 강제로 클릭합니다.
+            # [JS] 모바일 사이드바를 물리적으로 닫는 버튼 클릭 시뮬레이션
             st.components.v1.html("""
                 <script>
-                const sidebar = window.parent.document.querySelector('section[data-testid="stSidebar"]');
-                const closeButton = window.parent.document.querySelector('button[aria-label="Close"]');
-                if (closeButton) { closeButton.click(); }
-                else {
-                    const overlay = window.parent.document.querySelector('div[data-testid="stSidebarCollapseByDrag"]');
-                    if (overlay) overlay.click();
+                const buttons = window.parent.document.querySelectorAll('button');
+                for (const btn of buttons) {
+                    if (btn.getAttribute('aria-expanded') === 'true' || btn.innerText === '✕' || btn.querySelector('svg')) {
+                        // 사이드바가 열려있을 때만 닫기 동작 시도
+                        const sidebar = window.parent.document.querySelector('section[data-testid="stSidebar"]');
+                        if (sidebar && window.getComputedStyle(sidebar).width !== '0px') {
+                             btn.click();
+                        }
+                    }
                 }
                 </script>
                 """, height=0)
@@ -116,7 +139,7 @@ if menu == "새 단어 추가":
                             save_data(df)
                             st.success(f"🎉 '{word}' 저장 완료!")
 
-# --- 메뉴 2: 단어장 보기 (한 줄 레이아웃 및 Count 부활) ---
+# --- 메뉴 2: 단어장 보기 (한 줄 레이아웃 고정) ---
 elif menu == "단어장 보기":
     st.header("📚 나의 단어장")
     df = load_data()
@@ -126,40 +149,37 @@ elif menu == "단어장 보기":
             save_data(df); st.rerun()
         
         st.divider()
-        # 헤더 라인
-        h1, h2, h3, h4 = st.columns([2.5, 3.5, 3, 1])
+        # 헤더 (모바일에서는 생략하거나 아주 작게)
+        h1, h2, h3, h4 = st.columns([3, 3.5, 2.5, 1])
         h1.caption("단어")
         h2.caption("뜻")
-        h3.caption("기록 (횟수/%)")
-        h4.caption("삭제")
+        h3.caption("횟수|%")
+        h4.caption("X")
 
         for idx, row in df.iterrows():
-            # 데이터 로드
             cnt = int(row['count'])
             mis = int(row['mistakes'])
             rate = ((cnt - mis) / cnt * 100) if cnt > 0 else 0
             
-            # 한 줄 컬럼 배치
-            c1, c2, c3, c4 = st.columns([2.5, 3.5, 3, 1])
+            # [핵심] 컬럼 비율 고정 및 flex-nowrap 적용
+            c1, c2, c3, c4 = st.columns([3, 3.5, 2.5, 1])
             
-            with c1: st.markdown(f"<div class='mobile-text'><b>{row['word']}</b></div>", unsafe_allow_html=True)
-            with c2: st.markdown(f"<div class='mobile-text'>{row['meaning']}</div>", unsafe_allow_html=True)
-            with c3: st.markdown(f"<div class='stat-text'>{cnt}회 | {rate:.0f}%</div>", unsafe_allow_html=True)
+            with c1: st.markdown(f"<div class='mobile-word'>{row['word']}</div>", unsafe_allow_html=True)
+            with c2: st.markdown(f"<div class='mobile-mean'>{row['meaning']}</div>", unsafe_allow_html=True)
+            with c3: st.markdown(f"<div class='mobile-stat'>{cnt}회 | {rate:.0f}%</div>", unsafe_allow_html=True)
             with c4:
                 if st.button("🗑️", key=f"del_{idx}"):
                     df = df.drop(idx)
                     save_data(df); st.rerun()
-            st.markdown("<hr style='margin: 5px 0; border: none; border-top: 1px solid #f0f0f0;'>", unsafe_allow_html=True)
+            st.markdown("<hr>", unsafe_allow_html=True)
     else: st.info("등록된 단어가 없습니다.")
 
-# --- 메뉴 3: QUIZ!! ---
+# --- 메뉴 3: QUIZ!! (생략 - 기존과 동일) ---
 elif menu == "QUIZ!!":
     st.header("🧠 QUIZ!!")
-    
     if st.session_state.quiz_state == 'setup':
         df = load_data()
         if df.empty: st.warning("단어를 먼저 등록해주세요!"); st.stop()
-
         with st.container(border=True):
             st.subheader("🏁 QUIZ SETTING")
             num_q = st.selectbox("문제 수", [5, 10, 20])
@@ -168,16 +188,13 @@ elif menu == "QUIZ!!":
                 new_words = df[df['mistakes'] == 0]
                 n_inc = min(len(incorrect), int(num_q * 0.2))
                 n_new = num_q - n_inc
-                
                 pool = []
                 if n_inc > 0: pool.extend(incorrect.sample(n=n_inc).to_dict('records'))
                 if n_new > 0: pool.extend(new_words.sample(n=min(n_new, len(new_words))).to_dict('records')) if len(new_words) >= n_new else pool.extend(df.sample(n=n_new).to_dict('records'))
-                
                 random.shuffle(pool)
                 for item in pool:
                     v_sents = [item[f's{i}'] for i in range(1, 11) if pd.notna(item[f's{i}'])]
                     item['selected_sentence'] = random.choice(v_sents)
-                
                 st.session_state.quiz_pool = pool
                 st.session_state.total_q = len(pool)
                 st.session_state.current_q_idx = 0
@@ -190,43 +207,28 @@ elif menu == "QUIZ!!":
         q_idx = st.session_state.current_q_idx
         row = st.session_state.quiz_pool[q_idx]
         word, raw_sentence = str(row['word']), row['selected_sentence']
-        
         st.components.v1.html(f"""<script>
             var f = () => {{ var i = window.parent.document.querySelectorAll('input[type="text"]'); if(i.length>0) i[i.length-1].focus(); }};
             setTimeout(f, 300);
         </script>""", height=0)
-
         st.progress((q_idx) / st.session_state.total_q)
         masked_sentence = re.compile(re.escape(word), re.IGNORECASE).sub("( ______ )", raw_sentence)
-
         st.markdown(f"""<div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border: 1px solid #ddd; margin-bottom: 10px; text-align: center; font-size: 18px;">{masked_sentence}</div>""", unsafe_allow_html=True)
-        with st.expander("💡 Hint", expanded=True):
-            st.write(row['en_def'])
-
+        with st.expander("💡 Hint", expanded=True): st.write(row['en_def'])
         with st.form(f"quiz_form_{q_idx}", clear_on_submit=True):
             user_ans = st.text_input("정답 입력", label_visibility="collapsed", key=f"in_{q_idx}").strip()
             if st.form_submit_button("제출 (Enter)", use_container_width=True):
                 is_correct = user_ans.lower() == word.lower()
-                st.session_state.results.append({
-                    "word": word, 
-                    "user_ans": user_ans, 
-                    "is_correct": is_correct, 
-                    "raw_sentence": raw_sentence
-                })
-                
+                st.session_state.results.append({"word": word, "user_ans": user_ans, "is_correct": is_correct, "raw_sentence": raw_sentence})
                 if is_correct: st.success("🎯 정답!")
                 else: st.error(f"❌ 오답! 정답은: {word}")
-                
-                time.sleep(1)
-                st.session_state.current_q_idx += 1
+                time.sleep(1); st.session_state.current_q_idx += 1
                 if st.session_state.current_q_idx >= st.session_state.total_q: st.session_state.quiz_state = 'finished'
                 st.rerun()
-
         if st.button("🏠 퀴즈 중단"): st.session_state.quiz_state = 'setup'; st.rerun()
 
     elif st.session_state.quiz_state == 'finished':
         st.header("🏆 QUIZ REPORT")
-        
         if 'synced' not in st.session_state:
             with st.spinner("데이터 동기화 중..."):
                 df = load_data()
@@ -235,17 +237,12 @@ elif menu == "QUIZ!!":
                     if not idx.empty:
                         df.loc[idx, 'count'] += 1
                         if not res['is_correct']: df.loc[idx, 'mistakes'] += 1
-                save_data(df)
-                st.session_state.synced = True
-
+                save_data(df); st.session_state.synced = True
         for res in st.session_state.results:
             with st.container(border=True):
                 icon = "⭕" if res['is_correct'] else "❌"
                 st.markdown(f"### {icon} {res['word']}")
-                if not res['is_correct']:
-                    st.markdown(f"<span style='color:red;'>Your Answer: {res['user_ans']}</span>", unsafe_allow_html=True)
-                
+                if not res['is_correct']: st.markdown(f"<span style='color:red;'>Your Answer: {res['user_ans']}</span>", unsafe_allow_html=True)
                 bold_sent = re.compile(re.escape(res['word']), re.IGNORECASE).sub(f"**{res['word']}**", res['raw_sentence'])
                 st.write(f"Context: {bold_sent}")
-        
         if st.button("🏠 다시 시작하기"): st.session_state.quiz_state = 'setup'; st.rerun()
