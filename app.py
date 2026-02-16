@@ -143,13 +143,14 @@ if st.session_state.menu == "QUIZ":
                 word: {"count": 0, "mistakes": 0}
                 for word in df['word']
             }
-
+            st.session_state.quiz_results = []   # 🔥 추가
             st.session_state.current_idx = 0
             st.session_state.quiz_state = 'playing'
             st.rerun()
 
 
     elif st.session_state.quiz_state == 'playing':
+        
         if st.button("🏠 Quit Quiz", use_container_width=True):
             reset_quiz()
             st.session_state.menu = "QUIZ"
@@ -177,6 +178,14 @@ if st.session_state.menu == "QUIZ":
             if st.form_submit_button("CHECK", use_container_width=True):
 
                 is_correct = ans.lower() == row['word'].lower()
+                # 🔥 결과 기록 저장
+                st.session_state.quiz_results.append({
+                    "sentence": row['sel_sent'],
+                    "word": row['word'],
+                    "user_answer": ans,
+                    "correct": is_correct
+                })
+
 
                 df = st.session_state.full_df
                 df.loc[df['word'] == row['word'], 'count'] = int(df.loc[df['word'] == row['word'], 'count']) + 1
@@ -205,8 +214,8 @@ if st.session_state.menu == "QUIZ":
                     # 🔥 구글시트 저장은 단 1번
                     save_data(df)
 
-                    st.session_state.quiz_state = 'setup'
-                    st.session_state.menu = "Stat"
+                    st.session_state.quiz_state = "report"
+
 
 
                 st.rerun()
@@ -236,6 +245,51 @@ if st.session_state.menu == "QUIZ":
             setTimeout(focusInput, 1200);
             </script>
             """, height=0)
+    
+    elif st.session_state.quiz_state == "report":
+
+        st.subheader("📋 Quiz Report")
+
+        results = st.session_state.quiz_results
+        total = len(results)
+        correct_cnt = sum(1 for r in results if r["correct"])
+
+        st.markdown(f"## 🎯 Score: {correct_cnt} / {total}")
+
+        st.divider()
+
+        for i, r in enumerate(results, 1):
+            with st.container():
+                st.markdown(f"### Q{i}")
+
+                # 빈칸 처리
+                masked = re.compile(
+                    re.escape(r["word"]), re.IGNORECASE
+                ).sub("_____", r["sentence"])
+
+                st.markdown(f"**Sentence:** {masked}")
+                st.markdown(f"**Correct Word:** {r['word']}")
+
+                if r["correct"]:
+                    st.success("✅ Correct")
+                else:
+                    st.error("❌ Wrong")
+                    st.markdown(f"Your Answer: `{r['user_answer']}`")
+
+                st.divider()
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            if st.button("🏠 Home", use_container_width=True):
+                reset_quiz()
+                st.rerun()
+
+        with col2:
+            if st.button("🔄 Retry", use_container_width=True):
+                st.session_state.quiz_state = "setup"
+                st.rerun()
+
 
 
 # --- [Voca 메뉴] 스와이프 삭제 대안 ---
