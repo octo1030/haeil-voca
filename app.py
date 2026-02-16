@@ -106,7 +106,7 @@ if 'menu' not in st.session_state: st.session_state.menu = "QUIZ"
 if 'quiz_state' not in st.session_state: st.session_state.quiz_state = 'setup'
 
 # 상단 네비게이션 레이아웃
-nav_cols = st.columns(4)
+nav_cols = st.columns([1,1,1,1])
 nav_items = [("🧠", "QUIZ"), ("📚", "Voca"), ("📊", "Stat"), ("➕", "Add")]
 
 for i, (icon, label) in enumerate(nav_items):
