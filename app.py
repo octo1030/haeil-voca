@@ -23,51 +23,44 @@ st.set_page_config(page_title="Haeil's Voca", layout="centered")
 
 st.markdown("""
     <style>
-    /* 1. 사이드바 제거 */
+    /* 1️⃣ 사이드바 제거 */
     [data-testid="stSidebar"] { display: none; }
-    
-    /* [완결판] 모바일 가로 4열 강제 박스 그리드 */
+
+    /* 2️⃣ 상단 네비게이션 완전 고정 4등분 */
     div[data-testid="stHorizontalBlock"] {
         display: flex !important;
         flex-direction: row !important;
         flex-wrap: nowrap !important;
+        gap: 2px !important;
         width: 100% !important;
-        gap: 4px !important;            /* 버튼 사이 간격 */
-        justify-content: space-between !important;
-        align-items: center !important;
     }
 
+    /* column 내부 기본 padding 완전 제거 */
     div[data-testid="column"] {
-        /* 화면 폭에서 간격을 제외하고 정확히 4등분 */
-        width: calc(25% - 4px) !important; 
-        flex: 1 1 calc(25% - 4px) !important;
-        min-width: 0px !important;      /* 절대 밖으로 못 나가게 고정 */
-        max-width: 25% !important;
-        margin: 0 !important;
         padding: 0 !important;
+        margin: 0 !important;
     }
 
-    /* 버튼 자체의 강제 압축 */
+    /* 4등분 정확 고정 */
+    div[data-testid="column"] > div {
+        width: 100% !important;
+    }
+
+    /* 버튼 완전 압축 */
     .stButton > button {
         width: 100% !important;
-        min-width: 0px !important;
-        padding: 4px 0px !important;    /* 내부 여백 최소화 */
-        font-size: 11px !important;
-        height: 48px !important;
-        border-radius: 8px !important;
-        overflow: hidden !important;    /* 넘치는 텍스트 숨김 */
-        display: flex !important;
-        flex-direction: column !important;
-        align-items: center !important;
-        justify-content: center !important;
+        padding: 2px 0 !important;
+        font-size: 10px !important;
+        height: 42px !important;
+        border-radius: 6px !important;
         box-sizing: border-box !important;
     }
 
-    /* 버튼 내부의 텍스트 레이아웃 강제 교정 */
+    /* 버튼 내부 텍스트 줄바꿈 방지 + 넘침 방지 */
     .stButton div[data-testid="stMarkdownContainer"] p {
-        font-size: 11px !important;
-        line-height: 1.1 !important;
-        white-space: nowrap !important; /* 글자가 길어도 옆으로 안 퍼지게 */
+        font-size: 10px !important;
+        line-height: 1.0 !important;
+        white-space: nowrap !important;
         margin: 0 !important;
     }
             
@@ -100,8 +93,11 @@ st.markdown("""
         align-items: center;
     }
     
-    /* 메인 컨텐츠 상단 여백 보정 */
-    .main .block-container { padding-top: 1.5rem !important; padding-bottom: 100px; }
+    /* 메인 컨텐츠 상단 보정 */
+    .main .block-container {
+        padding-top: 1rem !important;
+        padding-bottom: 100px !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
