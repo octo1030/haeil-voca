@@ -18,115 +18,84 @@ def save_data(df): conn.update(data=df)
 api_key = st.secrets.get("OPENAI_API_KEY", "").strip()
 client = OpenAI(api_key=api_key)
 
-# [3] 모바일 최적화 및 강제 가로 네비게이션 CSS
+# [3] 모바일 최적화 및 아이폰 15 프로 전용 가로 고정 CSS
 st.set_page_config(page_title="Haeil's Voca", layout="centered")
 
 st.markdown("""
     <style>
-
-    /* 🔥 사이드바 제거 */
+    /* 1. 사이드바 및 기본 패딩 제거 */
     [data-testid="stSidebar"] { display: none; }
-
-    /* 🔥 상단 네비 래퍼 */
-    div[data-testid="stHorizontalBlock"] {
-        gap: 4px !important;
+    .main .block-container {
+        padding: 1rem 10px !important; 
+        max-width: 100% !important;
     }
 
-    /* 🔥 컬럼 완전 초기화 */
+    /* 2. 가로 4열 그리드 강제 고정 (아이폰 탈출 방지 핵심) */
+    .nav-wrapper {
+        display: grid !important;
+        grid-template-columns: repeat(4, 1fr) !important; /* 무조건 4등분 */
+        gap: 6px !important;
+        width: 100% !important;
+        margin-bottom: 20px !important;
+    }
+
+    /* 스트림릿 버튼 기본 스타일 덮어쓰기 */
     div[data-testid="column"] {
-        padding: 0 !important;
-        margin: 0 !important;
-        flex: 1 1 0% !important;   /* 핵심 */
-        min-width: 0 !important;   /* 넘침 방지 */
+        width: 100% !important;
+        flex: 1 1 0% !important;
+        min-width: 0 !important;
     }
 
-    /* 🔥 버튼 완전 압축 */
     .stButton > button {
         width: 100% !important;
-        height: 44px !important;
-        padding: 4px 0 !important;
+        height: 52px !important;
+        padding: 0 !important;
         font-size: 11px !important;
         border-radius: 10px !important;
-        box-sizing: border-box !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        justify-content: center !important;
+        line-height: 1.2 !important;
     }
 
-    /* 🔥 버튼 텍스트 */
-    .stButton div[data-testid="stMarkdownContainer"] p {
-        font-size: 11px !important;
-        line-height: 1.0 !important;
+    /* 버튼 안의 텍스트 줄바꿈 방지 */
+    .stButton p {
         margin: 0 !important;
         white-space: nowrap !important;
+        font-size: 11px !important;
     }
-
-    /* 🔥 상단 여백 줄이기 */
-    .main .block-container {
-        padding-top: 0.8rem !important;
-        padding-bottom: 100px !important;
-    }
-            
-    /* 3. 듀오링고 스타일 퀴즈 카드 */
+    
+    /* 퀴즈 카드 등 기타 스타일 */
     .quiz-card {
-        background: white;
-        border: 2px solid #e5e5e5;
-        border-radius: 18px;
-        padding: 25px;
-        box-shadow: 0 4px 0 #e5e5e5;
-        margin-bottom: 20px;
-        font-size: 1.1rem;
-        text-align: center;
-        color: #3c3c3c;
+        background: white; border: 2px solid #e5e5e5; border-radius: 18px;
+        padding: 25px; box-shadow: 0 4px 0 #e5e5e5; margin-bottom: 20px;
+        font-size: 1.1rem; text-align: center; color: #3c3c3c;
     }
-    
-    /* 4. 진행바 커스텀 */
     .stProgress > div > div > div > div {
-        background-color: #58cc02 !important;
-        height: 12px !important;
-        border-radius: 10px;
-    }
-    
-    /* 5. 단어장 미니멀리즘 */
-    .word-item {
-        padding: 15px;
-        border-bottom: 1px solid #f0f0f0;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-    }
-    
-    /* 메인 컨텐츠 상단 보정 */
-    .main .block-container {
-        padding-top: 1rem !important;
-        padding-bottom: 100px !important;
+        background-color: #58cc02 !important; height: 12px !important; border-radius: 10px;
     }
     </style>
     """, unsafe_allow_html=True)
 
-# [4] 네비게이션 로직 (세션 상태 이용)
+# [4] 네비게이션 로직 (ValueError 해결 및 가로 고정)
 if 'menu' not in st.session_state: st.session_state.menu = "QUIZ"
 if 'quiz_state' not in st.session_state: st.session_state.quiz_state = 'setup'
 
-# ---------- 상단 네비게이션 (완전 안정형) ----------
-nav_cols = st.columns([1,1,1,1])
-
-nav_items = [
-    ("🧠", "QUIZ"),
-    ("📚", "Voca"),
-    ("📊", "Stat"),
-    ("➕", "Add")
-]
+# 가로 정렬을 위한 컨테이너 생성
+nav_items = [("🧠", "QUIZ"), ("📚", "Voca"), ("📊", "Stat"), ("➕", "Add")]
+nav_cols = st.columns(4) # 리스트 [1,1,1,1] 대신 숫자 4를 넣어 기본 분할 사용
 
 for i, (icon, label) in enumerate(nav_items):
     with nav_cols[i]:
         is_active = st.session_state.menu == label
-        if st.button(
-            f"{icon}\n{label}",
-            key=f"nav_{label}",
-            use_container_width=True,
-            type="primary" if is_active else "secondary"
-        ):
+        # 버튼 내부 텍스트 구성: 아이콘과 라벨을 결합
+        if st.button(f"{icon}\n{label}", key=f"nav_{label}", use_container_width=True, 
+                     type="primary" if is_active else "secondary"):
             st.session_state.menu = label
             st.rerun()
 
+st.divider()
 
 # --- [QUIZ 메뉴] 듀오링고 스타일 ---
 if st.session_state.menu == "QUIZ":
@@ -152,37 +121,73 @@ if st.session_state.menu == "QUIZ":
         q_idx = st.session_state.current_idx
         row = st.session_state.quiz_pool[q_idx]
         
-        # 듀오링고 스타일 진행바
         st.progress((q_idx + 1) / len(st.session_state.quiz_pool))
         
-        st.markdown(f"<div class='quiz-card'>{re.compile(re.escape(row['word']), re.IGNORECASE).sub('_____', row['sel_sent'])}</div>", unsafe_allow_html=True)
+        st.markdown(
+            f"<div class='quiz-card'>{re.compile(re.escape(row['word']), re.IGNORECASE).sub('_____', row['sel_sent'])}</div>",
+            unsafe_allow_html=True
+        )
         st.caption(f"💡 {row['en_def']}")
 
-        # 자동 포커스
-        st.components.v1.html(f"""<script>
-            window.parent.document.querySelectorAll('input[type="text"]')[0].focus();
-        </script>""", height=0)
-
         with st.form(f"q_{q_idx}", clear_on_submit=True):
-            ans = st.text_input("Enter answer", label_visibility="collapsed").strip()
+            ans = st.text_input(
+                "Enter answer",
+                key=f"quiz_input_{q_idx}",
+                label_visibility="collapsed",
+                placeholder="Type your answer..."
+            ).strip()
+
             if st.form_submit_button("CHECK", use_container_width=True):
+
                 is_correct = ans.lower() == row['word'].lower()
-                
-                # 시트 즉시 업데이트 (정수 변환)
+
                 df = load_data()
                 df.loc[df['word'] == row['word'], 'count'] = int(df.loc[df['word'] == row['word'], 'count']) + 1
-                if not is_correct: 
+                if not is_correct:
                     df.loc[df['word'] == row['word'], 'mistakes'] = int(df.loc[df['word'] == row['word'], 'mistakes']) + 1
                 save_data(df)
 
-                if is_correct: st.balloons(); st.success("Awesome!")
-                else: st.error(f"Keep trying! It's '{row['word']}'")
-                time.sleep(1)
+                if is_correct:
+                    st.balloons()
+                    st.success("Awesome!")
+                else:
+                    st.error(f"Keep trying! It's '{row['word']}'")
+
+                time.sleep(0.5)
+
                 st.session_state.current_idx += 1
                 if st.session_state.current_idx >= len(st.session_state.quiz_pool):
                     st.session_state.quiz_state = 'setup'
                     st.session_state.menu = "Stat"
+
                 st.rerun()
+
+            # 🔥🔥🔥 강제 포커스 + 모바일 키보드 유지 (가장 안정적 방식)
+            st.components.v1.html(f"""
+            <script>
+            function focusInput() {{
+                const parentDoc = window.parent.document;
+                const inputs = parentDoc.querySelectorAll('input[type="text"]');
+                if (inputs.length > 0) {{
+                    const target = inputs[inputs.length - 1];
+
+                    target.focus();
+                    target.click();
+
+                    // 커서를 맨 뒤로 이동
+                    const len = target.value.length;
+                    target.setSelectionRange(len, len);
+                }}
+            }}
+
+            // 여러 번 시도 (모바일 대응)
+            setTimeout(focusInput, 100);
+            setTimeout(focusInput, 400);
+            setTimeout(focusInput, 800);
+            setTimeout(focusInput, 1200);
+            </script>
+            """, height=0)
+
 
 # --- [Voca 메뉴] 스와이프 삭제 대안 ---
 elif st.session_state.menu == "Voca":
