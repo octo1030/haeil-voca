@@ -26,17 +26,20 @@ st.markdown("""
     /* 1. 사이드바 제거 */
     [data-testid="stSidebar"] { display: none; }
     
-    /* 2. 하단 고정 네비게이션 */
-    .bottom-nav {
-        position: fixed;
-        bottom: 0; left: 0; right: 0;
-        background: white;
-        display: flex;
-        justify-content: space-around;
-        padding: 12px 0;
-        border-top: 1px solid #eee;
-        z-index: 1000;
-        box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
+    /* 2. 메뉴 가로 정렬 강제 (모바일 대응 핵심) */
+    [data-testid="column"] {
+        width: 25% !important;
+        flex: 1 1 25% !important;
+        min-width: 20% !important;
+    }
+    
+    /* 버튼 내부 텍스트 및 간격 최적화 */
+    .stButton > button {
+        width: 100% !important;
+        padding: 5px 0px !important;
+        font-size: 13px !important;  /* 폰트 살짝 축소 */
+        white-space: pre-wrap !important;
+        line-height: 1.2 !important;
     }
     
     /* 3. 듀오링고 스타일 퀴즈 카드 */
@@ -47,7 +50,7 @@ st.markdown("""
         padding: 25px;
         box-shadow: 0 4px 0 #e5e5e5;
         margin-bottom: 20px;
-        font-size: 1.2rem;
+        font-size: 1.1rem;
         text-align: center;
         color: #3c3c3c;
     }
@@ -83,7 +86,12 @@ nav_items = [("🧠", "QUIZ"), ("📚", "Voca"), ("📊", "Stat"), ("➕", "Add"
 
 for i, (icon, label) in enumerate(nav_items):
     with nav_cols[i]:
-        if st.button(f"{icon}\n{label}", key=f"nav_{label}", use_container_width=True):
+        # 현재 활성화된 메뉴인지 확인
+        is_active = st.session_state.menu == label
+        # 활성 메뉴는 파란색(primary), 나머지는 기본색(secondary)
+        if st.button(f"{icon}\n{label}", key=f"nav_{label}", 
+                     use_container_width=True, 
+                     type="primary" if is_active else "secondary"):
             st.session_state.menu = label
             st.rerun()
 
@@ -94,7 +102,7 @@ if st.session_state.menu == "QUIZ":
     if st.session_state.quiz_state == 'setup':
         st.subheader("🏁 Ready for Quiz?")
         df = load_data()
-        num_q = st.select_slider("How many words?", options=[5, 10, 20])
+        num_q = st.select_slider("How many words?", options=[5, 10, 15, 20, 30, 50])
         if st.button("START", use_container_width=True, type="primary"):
             # 8:2 하이브리드 로직 (기존 검증된 로직 유지)
             incorrect = df[df['mistakes'] > 0]
@@ -160,17 +168,55 @@ elif st.session_state.menu == "Voca":
 elif st.session_state.menu == "Stat":
     st.subheader("📊 Your Progress")
     df = load_data()
-    df['count'] = df['count'].astype(int)
-    df['mistakes'] = df['mistakes'].astype(int)
-    
-    c1, c2 = st.columns(2)
-    c1.metric("Words", f"{len(df)}")
-    acc = int((1 - (df['mistakes'].sum() / df['count'].sum())) * 100) if df['count'].sum() > 0 else 100
-    c2.metric("Accuracy", f"{acc}%")
-    
-    if st.button("🔄 Reset Stats", use_container_width=True):
-        df['count'], df['mistakes'] = 0, 0
-        save_data(df); st.rerun()
+    if not df.empty:
+        # 데이터 타입 강제 변환 (정수형)
+        df['count'] = pd.to_numeric(df['count'], errors='coerce').fillna(0).astype(int)
+        df['mistakes'] = pd.to_numeric(df['mistakes'], errors='coerce').fillna(0).astype(int)
+        
+        total_count = int(df['count'].sum())
+        total_mistakes = int(df['mistakes'].sum())
+        
+        col1, col2 = st.columns(2)
+        col1.metric("총 단어 수", f"{len(df)}개")
+        
+        # 정답률 계산 (소수점 제거)
+        if total_count > 0:
+            correct_rate = int(((total_count - total_mistakes) / total_count) * 100)
+        else:
+            correct_rate = 100
+            
+        col2.metric("전체 정답률", f"{correct_rate}%")
+        
+        st.subheader("🔥 오답률 높은 단어 (Top 5)")
+        # 오답률 계산 및 표시
+        df['rate'] = ((df['mistakes'] / df['count'].replace(0, 1)) * 100).fillna(0).astype(int)
+        bad_words = df[df['count'] > 0].sort_values('rate', ascending=False).head(5)
+        
+        if not bad_words.empty:
+            # 테이블 표시 시 숫자들을 정수로 변환하여 출력
+            st.table(bad_words[['word', 'meaning', 'count', 'mistakes']].assign(
+                count=bad_words['count'].astype(str),
+                mistakes=bad_words['mistakes'].astype(str)
+            ))
+        else:
+            st.info("아직 퀴즈 데이터가 충분하지 않습니다.")
+
+        st.divider()
+        
+        # --- 데이터 초기화 섹션 ---
+        st.subheader("⚙️ 데이터 관리")
+        
+        if st.button("🔄 전체 통계 데이터 초기화", use_container_width=True):
+            with st.spinner("초기화 중..."):
+                df['count'] = 0
+                df['mistakes'] = 0
+                # 시트 업데이트
+                save_data(df)
+                st.success("모든 통계가 초기화되었습니다!")
+                time.sleep(1)
+                st.rerun()
+    else:
+        st.info("통계 데이터가 없습니다. 먼저 단어를 추가하고 퀴즈를 풀어보세요.")
 
 # --- [Add 메뉴] ---
 elif st.session_state.menu == "Add":
