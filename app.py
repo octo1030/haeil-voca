@@ -250,10 +250,13 @@ if st.session_state.menu == "QUIZ":
 
 
                 df = st.session_state.full_df
-                df.loc[df['word'] == row['word'], 'count'] = int(df.loc[df['word'] == row['word'], 'count']) + 1
+                idx = st.session_state.word_index_map[row['word']]
+
+                df.at[idx, 'count'] = int(df.at[idx, 'count']) + 1
+
                 if not is_correct:
-                    df.loc[df['word'] == row['word'], 'mistakes'] = int(df.loc[df['word'] == row['word'], 'mistakes']) + 1
-                save_data(df)
+                    df.at[idx, 'mistakes'] = int(df.at[idx, 'mistakes']) + 1
+
 
                 if is_correct:
                     st.success("Awesome!")
