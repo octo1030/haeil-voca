@@ -179,8 +179,18 @@ if st.session_state.menu == "QUIZ":
                 ).to_dict('records')
             )
 
+            if len(pool) == 0:
+                st.warning("No words available in selected range.")
+                st.stop()
+
             random.shuffle(pool)
 
+            for item in pool:
+                v_sents = [item[f's{i}'] for i in range(1, 11) if pd.notna(item[f's{i}'])]
+                item['sel_sent'] = random.choice(v_sents) if v_sents else "No sentence."
+
+            st.session_state.quiz_pool = pool
+            st.session_state.full_df = df.copy()
 
             # 🔥 단어 → 인덱스 맵 (초고속 접근용)
             st.session_state.word_index_map = {
@@ -199,7 +209,10 @@ if st.session_state.menu == "QUIZ":
 
 
     elif st.session_state.quiz_state == 'playing':
-        
+        if "quiz_pool" not in st.session_state:
+            st.session_state.quiz_state = "setup"
+            st.rerun()
+            
         if st.button("🏠 Quit Quiz", use_container_width=True):
             reset_quiz()
             st.session_state.menu = "QUIZ"
