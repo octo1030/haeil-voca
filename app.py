@@ -6,32 +6,42 @@ import random
 import re
 import time
 from openai import OpenAI
-
 # [1] 시스템 설정
 os.environ["PYTHONIOENCODING"] = "utf-8"
 conn = st.connection("gsheets", type=GSheetsConnection)
-
+if "last_num_q" not in st.session_state:
+    st.session_state["last_num_q"] = 10
+if "last_range_option" not in st.session_state:
+    st.session_state["last_range_option"] = "Entire Range"
+if "last_range_values" not in st.session_state:
+    st.session_state["last_range_values"] = (1, 50)
 def load_data(): return conn.read(ttl=0)
 def save_data(df): conn.update(data=df)
+def mask_phrase(sentence, phrase):
+    words = phrase.split()
+    masked_sentence = sentence
+
+    for w in words:
+        # 단어 변형 허용 (roll → rolls, rolled 등)
+        pattern = re.compile(rf"\b{re.escape(w)}\w*\b", re.IGNORECASE)
+        masked_sentence = pattern.sub("_____", masked_sentence)
+
+    return masked_sentence
+
 
 # [2] OpenAI API
 api_key = st.secrets.get("OPENAI_API_KEY", "").strip()
 client = OpenAI(api_key=api_key)
-
 # [3] 모바일 최적화 및 아이폰 15 프로 전용 가로 고정 CSS
 st.set_page_config(page_title="Haeil's Voca", layout="centered")
-
 # ✅ 세션 초기화 (무조건 여기)
 if "menu" not in st.session_state:
     st.session_state["menu"] = "QUIZ"
-
 if "quiz_state" not in st.session_state:
     st.session_state["quiz_state"] = "setup"
-
-
 def reset_quiz():
     for key in [
-        "quiz_state",
+        "quiz_result",
         "quiz_pool",
         "current_idx",
         "temp_score",
@@ -40,22 +50,15 @@ def reset_quiz():
     ]:
         if key in st.session_state:
             del st.session_state[key]
-
     st.session_state.quiz_state = "setup"
-
-
 # ✅ 메뉴 변경 감지용
 if "prev_menu" not in st.session_state:
     st.session_state.prev_menu = st.session_state.menu
-
 # 메뉴가 바뀌면 자동으로 햄버거 닫기
 if st.session_state.prev_menu != st.session_state.menu:
     st.session_state.menu_open = False
     st.session_state.prev_menu = st.session_state.menu
-
     
-
-
 st.markdown("""
     <style>
     .bottom-nav {
@@ -68,7 +71,6 @@ st.markdown("""
         border-top: 1px solid #eee;
         z-index: 999;
     }
-
     .main .block-container {
         padding-bottom: 70px !important;
     }
@@ -84,130 +86,119 @@ st.markdown("""
     }
     </style>
     """, unsafe_allow_html=True)
-
 # [4] 네비게이션 로직 (ValueError 해결 및 가로 고정)
 # =========================
 # 🍔 햄버거 네비게이션
 # =========================
+if not (st.session_state.menu == "QUIZ" and st.session_state.quiz_state == "playing"):
 
-with st.expander("☰ Menu", expanded=False):
-
-    if st.button("🧠 QUIZ", use_container_width=True):
-        st.session_state["menu"] = "QUIZ"
-        reset_quiz()
-        st.rerun()
-
-    if st.button("📚 Voca", use_container_width=True):
-        st.session_state["menu"] = "Voca"
-        reset_quiz()
-        st.rerun()
-
-    if st.button("📊 Stat", use_container_width=True):
-        st.session_state["menu"] = "Stat"
-        reset_quiz()
-        st.rerun()
-
-    if st.button("➕ Add", use_container_width=True):
-        st.session_state["menu"] = "Add"
-        reset_quiz()
-        st.rerun()
-
-
-
-
-# --- [QUIZ 메뉴] 듀오링고 스타일 ---
+    with st.expander("☰ Menu", expanded=False):
+        if st.button("🧠 QUIZ", use_container_width=True):
+            st.session_state["menu"] = "QUIZ"
+            reset_quiz()
+            st.rerun()
+        if st.button("📚 Voca", use_container_width=True):
+            st.session_state["menu"] = "Voca"
+            reset_quiz()
+            st.rerun()
+        if st.button("📊 Stat", use_container_width=True):
+            st.session_state["menu"] = "Stat"
+            reset_quiz()
+            st.rerun()
+        if st.button("➕ Add", use_container_width=True):
+            st.session_state["menu"] = "Add"
+            reset_quiz()
+            st.rerun()
+# --- [QUIZ 메뉴: 최종 데이터 고정 버전] ---
 if st.session_state.menu == "QUIZ":
+    df = load_data()
+    total_words = len(df)
+    # [1] 데이터 보존을 위한 변수 초기화 (최초 1회만)
+    if "final_num" not in st.session_state: st.session_state.final_num = 10
+    if "final_option" not in st.session_state: st.session_state.final_option = "Entire Range"
+    if "final_range" not in st.session_state: st.session_state.final_range = (1, total_words)
+    # 콜백 함수들: 위젯이 바뀌는 즉시 'final' 변수에 값을 박제함
+    def update_num(): st.session_state.final_num = st.session_state.tmp_num
+    def update_option(): st.session_state.final_option = st.session_state.tmp_option
+    def update_range(): st.session_state.final_range = st.session_state.tmp_range
+    
+    # [5] START 버튼 (여기서 num_q 등은 final 변수를 참조)
     if st.session_state.quiz_state == 'setup':
-        st.subheader("🏁 Ready for Quiz?")
-        df = load_data()
-
-        total_words = len(df)
-
-        st.markdown("### ⚙️ Quiz Settings")
-
-        num_q = st.select_slider(
+        # [2] 문제 개수
+        st.select_slider(
             "How many words?",
             options=[5, 10, 15, 20, 30, 50],
-            value=10
+            value=st.session_state.final_num,
+            key="tmp_num",
+            on_change=update_num
         )
-
-        # 🔥 범위 선택 슬라이더 추가
-        range_option = st.radio(
+        # [3] 범위 옵션
+        st.radio(
             "What's the range?",
             ["Entire Range", "Custom Range"],
-            horizontal=True
+            index=0 if st.session_state.final_option == "Entire Range" else 1,
+            horizontal=True,
+            key="tmp_option",
+            on_change=update_option
         )
-
-        if range_option == "Entire Range":
+        # [4] 상세 범위 (Custom Range일 때만 그리지만, 값은 final_range에서 가져옴)
+        if st.session_state.final_option == "Custom Range":
+            # 범위 보정
+            low, high = st.session_state.final_range
+            safe_range = (max(1, min(low, total_words)), max(1, min(high, total_words)))
+            
+            st.slider(
+                "Select word range (by index)",
+                1, total_words,
+                value=safe_range,
+                key="tmp_range",
+                on_change=update_range
+            )
+            start_idx = st.session_state.final_range[0] - 1
+            end_idx = st.session_state.final_range[1]
+        else:
             start_idx = 0
             end_idx = total_words
-        else:
-            selected_range = st.slider(
-                "Select word range (by index)",
-                min_value=1,
-                max_value=total_words,
-                value=(1, min(50, total_words))
-            )
-            start_idx = selected_range[0] - 1
-            end_idx = selected_range[1]
-
-        
+        st.subheader("🏁 Ready for Quiz?")
         if st.button("START", use_container_width=True, type="primary"):
-
+            num_q = st.session_state.final_num
             df_range = df.iloc[start_idx:end_idx].copy()
-
+            # ... 이하 START 로직 동일
             if df_range.empty:
                 st.warning("No words in selected range.")
                 st.stop()
-
-            # 8:2 하이브리드 로직 (범위 적용)
-            incorrect = df_range[df_range['mistakes'] > 0]
-
-            pool = list(
-                incorrect.sample(
-                    n=min(len(incorrect), int(num_q * 0.2))
-                ).to_dict('records')
+            # 🔥 숫자형 강제 변환 (안전장치)
+            df_range['count'] = pd.to_numeric(df_range['count'], errors='coerce').fillna(0)
+            df_range['mistakes'] = pd.to_numeric(df_range['mistakes'], errors='coerce').fillna(0)
+            # 🔥 가중치 계산
+            df_range['weight'] = (
+                (df_range['mistakes'] + 1) ** 1.5 /
+                (df_range['count'] + 2)
             )
-
-            remaining = df_range[
-                ~df_range['word'].isin([x['word'] for x in pool])
-            ]
-
-            pool.extend(
-                remaining.sample(
-                    n=min(len(remaining), num_q - len(pool))
-                ).to_dict('records')
+            # 🔥 가중 랜덤 추출
+            pool_df = df_range.sample(
+                n=min(num_q, len(df_range)),
+                weights='weight',
+                replace=False
             )
-
-            if len(pool) == 0:
-                st.warning("No words available in selected range.")
-                st.stop()
-
+            pool = pool_df.to_dict('records')
             random.shuffle(pool)
-
             for item in pool:
                 v_sents = [item[f's{i}'] for i in range(1, 11) if pd.notna(item[f's{i}'])]
                 item['sel_sent'] = random.choice(v_sents) if v_sents else "No sentence."
-
             st.session_state.quiz_pool = pool
             st.session_state.full_df = df.copy()
-
-            # 🔥 단어 → 인덱스 맵 (초고속 접근용)
             st.session_state.word_index_map = {
                 word: idx for idx, word in enumerate(df['word'])
             }
-
-            # 🔥 퀴즈 중 임시 점수 저장 (구글시트 접근 안함)
             st.session_state.temp_score = {
                 word: {"count": 0, "mistakes": 0}
                 for word in df['word']
             }
-            st.session_state.quiz_results = []   # 🔥 추가
+            st.session_state.quiz_results = []
             st.session_state.current_idx = 0
             st.session_state.quiz_state = 'playing'
             st.rerun()
-
-
     elif st.session_state.quiz_state == 'playing':
         if "quiz_pool" not in st.session_state:
             st.session_state.quiz_state = "setup"
@@ -217,18 +208,15 @@ if st.session_state.menu == "QUIZ":
             reset_quiz()
             st.session_state.menu = "QUIZ"
             st.rerun()
-
         q_idx = st.session_state.current_idx
         row = st.session_state.quiz_pool[q_idx]
         
         st.progress((q_idx + 1) / len(st.session_state.quiz_pool))
         
-        st.markdown(
-            f"<div class='quiz-card'>{re.compile(re.escape(row['word']), re.IGNORECASE).sub('_____', row['sel_sent'])}</div>",
-            unsafe_allow_html=True
-        )
-        st.caption(f"💡 {row['en_def']}")
+        masked = mask_phrase(row['sel_sent'], row['word'])
+        st.markdown(f"<div class='quiz-card'>{masked}</div>", unsafe_allow_html=True)
 
+        st.caption(f"💡 {row['en_def']}")
         with st.form(f"q_{q_idx}", clear_on_submit=True):
             ans = st.text_input(
                 "Enter answer",
@@ -236,9 +224,7 @@ if st.session_state.menu == "QUIZ":
                 label_visibility="collapsed",
                 placeholder="Type your answer..."
             ).strip()
-
             if st.form_submit_button("CHECK", use_container_width=True):
-
                 is_correct = ans.lower() == row['word'].lower()
                 # 🔥 결과 기록 저장
                 st.session_state.quiz_results.append({
@@ -247,44 +233,24 @@ if st.session_state.menu == "QUIZ":
                     "user_answer": ans,
                     "correct": is_correct
                 })
-
-
                 df = st.session_state.full_df
                 idx = st.session_state.word_index_map[row['word']]
-
                 df.at[idx, 'count'] = int(df.at[idx, 'count']) + 1
-
                 if not is_correct:
                     df.at[idx, 'mistakes'] = int(df.at[idx, 'mistakes']) + 1
-
-
                 if is_correct:
                     st.success("Awesome!")
                 else:
                     st.error(f"Keep trying! It's '{row['word']}'")
-
                 time.sleep(0.5)
-
                 st.session_state.current_idx += 1
                 if st.session_state.current_idx >= len(st.session_state.quiz_pool):
-
                     # 🔥 여기서 한 번만 실제 DataFrame 반영
                     df = st.session_state.full_df
-
-                    for word, score in st.session_state.temp_score.items():
-                        idx = st.session_state.word_index_map[word]
-                        df.at[idx, 'count'] += score['count']
-                        df.at[idx, 'mistakes'] += score['mistakes']
-
                     # 🔥 구글시트 저장은 단 1번
                     save_data(df)
-
                     st.session_state.quiz_state = "report"
-
-
-
                 st.rerun()
-
             # 🔥🔥🔥 강제 포커스 + 모바일 키보드 유지 (가장 안정적 방식)
             st.components.v1.html(f"""
             <script>
@@ -293,16 +259,13 @@ if st.session_state.menu == "QUIZ":
                 const inputs = parentDoc.querySelectorAll('input[type="text"]');
                 if (inputs.length > 0) {{
                     const target = inputs[inputs.length - 1];
-
                     target.focus();
                     target.click();
-
                     // 커서를 맨 뒤로 이동
                     const len = target.value.length;
                     target.setSelectionRange(len, len);
                 }}
             }}
-
             // 여러 번 시도 (모바일 대응)
             setTimeout(focusInput, 100);
             setTimeout(focusInput, 400);
@@ -312,51 +275,35 @@ if st.session_state.menu == "QUIZ":
             """, height=0)
     
     elif st.session_state.quiz_state == "report":
-
         st.subheader("📋 Quiz Report")
-
         results = st.session_state.quiz_results
         total = len(results)
         correct_cnt = sum(1 for r in results if r["correct"])
-
         st.markdown(f"## 🎯 Score: {correct_cnt} / {total}")
-
         st.divider()
-
         for i, r in enumerate(results, 1):
             with st.container():
                 st.markdown(f"### Q{i}")
-
                 # 빈칸 처리
-                masked = re.compile(
-                    re.escape(r["word"]), re.IGNORECASE
-                ).sub("_____", r["sentence"])
+                masked = mask_phrase(r["sentence"], r["word"])
 
                 st.markdown(f"**Sentence:** {masked}")
                 st.markdown(f"**Correct Word:** {r['word']}")
-
                 if r["correct"]:
                     st.success("✅ Correct")
                 else:
                     st.error("❌ Wrong")
                     st.markdown(f"Your Answer: `{r['user_answer']}`")
-
                 st.divider()
-
         col1, col2 = st.columns(2)
-
         with col1:
             if st.button("🏠 Home", use_container_width=True):
                 reset_quiz()
                 st.rerun()
-
         with col2:
             if st.button("🔄 Retry", use_container_width=True):
                 st.session_state.quiz_state = "setup"
                 st.rerun()
-
-
-
 # --- [Voca 메뉴] 스와이프 삭제 대안 ---
 elif st.session_state.menu == "Voca":
     st.subheader("📚 Word Bank")
@@ -367,7 +314,6 @@ elif st.session_state.menu == "Voca":
             if st.button("🗑️ Delete this word", key=f"del_{idx}", use_container_width=True):
                 save_data(df.drop(idx))
                 st.rerun()
-
 # --- [Stat 메뉴] 대시보드 (정수형) ---
 elif st.session_state.menu == "Stat":
     st.subheader("📊 Your Progress")
@@ -391,10 +337,10 @@ elif st.session_state.menu == "Stat":
             
         col2.metric("전체 정답률", f"{correct_rate}%")
         
-        st.subheader("🔥 오답률 높은 단어 (Top 10)")
+        st.subheader("🔥 오답률 높은 단어 (Top 20)")
         # 오답률 계산 및 표시
         df['rate'] = ((df['mistakes'] / df['count'].replace(0, 1)) * 100).fillna(0).astype(int)
-        bad_words = df[df['count'] > 0].sort_values('rate', ascending=False).head(10)
+        bad_words = df[df['count'] > 0].sort_values('rate', ascending=False).head(20)
         
         if not bad_words.empty:
             # 테이블 표시 시 숫자들을 정수로 변환하여 출력
@@ -404,7 +350,6 @@ elif st.session_state.menu == "Stat":
             ))
         else:
             st.info("아직 퀴즈 데이터가 충분하지 않습니다.")
-
         st.divider()
         
         # --- 데이터 초기화 섹션 ---
@@ -421,7 +366,6 @@ elif st.session_state.menu == "Stat":
                 st.rerun()
     else:
         st.info("통계 데이터가 없습니다. 먼저 단어를 추가하고 퀴즈를 풀어보세요.")
-
 # --- [Add 메뉴] ---
 elif st.session_state.menu == "Add":
     st.subheader("➕ New Word")
