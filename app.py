@@ -298,9 +298,11 @@ if st.session_state.menu == "QUIZ":
                     f"""
                     <div style="
                         background:#f6f6f6;
+                        color:#222222;
                         padding:10px 15px;
                         border-radius:12px;
-                        font-size:0.95rem;">
+                        font-size:0.95rem;
+
                         📖 {row['en_def']}
                     </div>
                     """,
@@ -315,6 +317,7 @@ if st.session_state.menu == "QUIZ":
                     f"""
                     <div style="
                         background:#fff4e5;
+                        color:#222222;
                         padding:10px 15px;
                         border-radius:12px;
                         margin-top:8px;
