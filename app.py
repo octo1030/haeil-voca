@@ -285,8 +285,15 @@ if st.session_state.menu == "QUIZ":
 
             elif st.session_state.hint_stage == 1:
                 if st.button("🔤첫글자", key=f"hint_btn_{q_idx}"):
+
+                    first_letter = row['word'].strip()[0]
+
+                    # 입력창 key와 동일하게 맞춰줘야 함
+                    st.session_state[f"quiz_input_{q_idx}"] = first_letter
+
                     st.session_state.hint_stage = 2
                     st.rerun()
+
 
             # stage == 2 → 버튼 안 보임
 
@@ -295,39 +302,22 @@ if st.session_state.menu == "QUIZ":
 
             if st.session_state.hint_stage >= 1:
                 st.markdown(
-                    f"""
+                     f"""
                     <div style="
-                        background:#f6f6f6;
-                        color:#222222;
-                        padding:10px 15px;
-                        border-radius:12px;
-                        font-size:0.95rem;
-
-                        📖 {row['en_def']}
+                        background:#f8f8f8;
+                        color:#333;
+                        padding:6px 10px;
+                        border-radius:8px;
+                        font-size:0.85rem;
+                        line-height:1.3;
+                        margin-bottom:6px;">
+                        {row['en_def']}
                     </div>
                     """,
                     unsafe_allow_html=True
                 )
 
-            if st.session_state.hint_stage >= 2:
-                words = row['word'].split()
-                letters = " ".join([w[0] for w in words])
-
-                st.markdown(
-                    f"""
-                    <div style="
-                        background:#fff4e5;
-                        color:#222222;
-                        padding:10px 15px;
-                        border-radius:12px;
-                        margin-top:8px;
-                        font-size:0.95rem;">
-                        🔤 {letters}
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
-
+            
         st.markdown("</div>", unsafe_allow_html=True)
 
 
