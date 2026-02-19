@@ -15,6 +15,9 @@ if "last_range_option" not in st.session_state:
     st.session_state["last_range_option"] = "Entire Range"
 if "last_range_values" not in st.session_state:
     st.session_state["last_range_values"] = (1, 50)
+if "hint_stage" not in st.session_state:
+    st.session_state.hint_stage = 0
+
 def load_data(): return conn.read(ttl=0)
 def save_data(df): conn.update(data=df)
 def mask_phrase(sentence, phrase):
@@ -34,6 +37,7 @@ api_key = st.secrets.get("OPENAI_API_KEY", "").strip()
 client = OpenAI(api_key=api_key)
 # [3] 모바일 최적화 및 아이폰 15 프로 전용 가로 고정 CSS
 st.set_page_config(page_title="Haeil's Voca", layout="centered")
+
 # ✅ 세션 초기화 (무조건 여기)
 if "menu" not in st.session_state:
     st.session_state["menu"] = "QUIZ"
@@ -61,6 +65,33 @@ if st.session_state.prev_menu != st.session_state.menu:
     
 st.markdown("""
     <style>
+    /* 모바일 키보드 대응 */
+    @media (max-width: 768px) {
+        .mobile-input-container {
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+    }
+
+    
+    .mobile-input-container {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        background: white;
+        padding: 10px;
+        border-top: 1px solid #eee;
+        z-index: 9999;
+    }
+
+    .main .block-container {
+        padding-bottom: 120px !important;
+    }
+
+    .quiz-input-box input {
+        font-size: 18px !important;
+        height: 50px !important;
+    }
     .bottom-nav {
         position: fixed;
         bottom: 0;
@@ -111,6 +142,7 @@ if not (st.session_state.menu == "QUIZ" and st.session_state.quiz_state == "play
             st.rerun()
 # --- [QUIZ 메뉴: 최종 데이터 고정 버전] ---
 if st.session_state.menu == "QUIZ":
+
     df = load_data()
     total_words = len(df)
     # [1] 데이터 보존을 위한 변수 초기화 (최초 1회만)
@@ -123,6 +155,7 @@ if st.session_state.menu == "QUIZ":
     def update_range(): st.session_state.final_range = st.session_state.tmp_range
     
     # [5] START 버튼 (여기서 num_q 등은 final 변수를 참조)
+    
     if st.session_state.quiz_state == 'setup':
         # [2] 문제 개수
         st.select_slider(
@@ -161,6 +194,8 @@ if st.session_state.menu == "QUIZ":
             end_idx = total_words
         st.subheader("🏁 Ready for Quiz?")
         if st.button("START", use_container_width=True, type="primary"):
+            st.session_state.hint_stage = 0
+
             num_q = st.session_state.final_num
             df_range = df.iloc[start_idx:end_idx].copy()
             # ... 이하 START 로직 동일
@@ -200,79 +235,207 @@ if st.session_state.menu == "QUIZ":
             st.session_state.quiz_state = 'playing'
             st.rerun()
     elif st.session_state.quiz_state == 'playing':
-        if "quiz_pool" not in st.session_state:
-            st.session_state.quiz_state = "setup"
-            st.rerun()
-            
         if st.button("🏠 Quit Quiz", use_container_width=True):
             reset_quiz()
             st.session_state.menu = "QUIZ"
             st.rerun()
+
+
+        if "quiz_pool" not in st.session_state:
+            st.session_state.quiz_state = "setup"
+            st.rerun()
+
         q_idx = st.session_state.current_idx
         row = st.session_state.quiz_pool[q_idx]
-        
-        st.progress((q_idx + 1) / len(st.session_state.quiz_pool))
-        
-        masked = mask_phrase(row['sel_sent'], row['word'])
-        st.markdown(f"<div class='quiz-card'>{masked}</div>", unsafe_allow_html=True)
 
-        st.caption(f"💡 {row['en_def']}")
+        st.progress((q_idx + 1) / len(st.session_state.quiz_pool))
+        masked = mask_phrase(row['sel_sent'], row['word'])
+
+        st.markdown(
+            f"""
+            <div class="quiz-card">
+                {masked}
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+
+
+        # =========================
+        # 🔥 단계형 힌트 시스템 (form 밖에서만 동작)
+        # =========================
+
+        st.markdown(" ")
+
+        # =========================
+        # 🔥 단계형 단일 힌트 버튼 시스템
+        # =========================
+
+        st.markdown("<div style='margin-top:10px;'>", unsafe_allow_html=True)
+
+        col_hint_btn, col_hint_display = st.columns([1, 5])
+
+        with col_hint_btn:
+
+            if st.session_state.hint_stage == 0:
+                if st.button("💡힌트", key=f"hint_btn_{q_idx}"):
+                    st.session_state.hint_stage = 1
+                    st.rerun()
+
+            elif st.session_state.hint_stage == 1:
+                if st.button("🔤첫글자", key=f"hint_btn_{q_idx}"):
+                    st.session_state.hint_stage = 2
+                    st.rerun()
+
+            # stage == 2 → 버튼 안 보임
+
+
+        with col_hint_display:
+
+            if st.session_state.hint_stage >= 1:
+                st.markdown(
+                    f"""
+                    <div style="
+                        background:#f6f6f6;
+                        padding:10px 15px;
+                        border-radius:12px;
+                        font-size:0.95rem;">
+                        📖 {row['en_def']}
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+
+            if st.session_state.hint_stage >= 2:
+                words = row['word'].split()
+                letters = " ".join([w[0] for w in words])
+
+                st.markdown(
+                    f"""
+                    <div style="
+                        background:#fff4e5;
+                        padding:10px 15px;
+                        border-radius:12px;
+                        margin-top:8px;
+                        font-size:0.95rem;">
+                        🔤 {letters}
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+
+        st.markdown("</div>", unsafe_allow_html=True)
+
+
+        # =========================
+        # 🔥 하단 고정 입력창 (모바일)
+        # =========================
+        st.markdown("<div class='mobile-input-container'>", unsafe_allow_html=True)
+
         with st.form(f"q_{q_idx}", clear_on_submit=True):
+
             ans = st.text_input(
-                "Enter answer",
+                "",
                 key=f"quiz_input_{q_idx}",
                 label_visibility="collapsed",
-                placeholder="Type your answer..."
+                placeholder="Type your answer...",
             ).strip()
-            if st.form_submit_button("CHECK", use_container_width=True):
+
+            submitted = st.form_submit_button("CHECK", use_container_width=True)
+
+            if submitted:
+
                 is_correct = ans.lower() == row['word'].lower()
-                # 🔥 결과 기록 저장
+
                 st.session_state.quiz_results.append({
                     "sentence": row['sel_sent'],
                     "word": row['word'],
                     "user_answer": ans,
                     "correct": is_correct
                 })
+
                 df = st.session_state.full_df
                 idx = st.session_state.word_index_map[row['word']]
                 df.at[idx, 'count'] = int(df.at[idx, 'count']) + 1
+
                 if not is_correct:
                     df.at[idx, 'mistakes'] = int(df.at[idx, 'mistakes']) + 1
+
                 if is_correct:
                     st.success("Awesome!")
                 else:
                     st.error(f"Keep trying! It's '{row['word']}'")
-                time.sleep(0.5)
+
+                time.sleep(0.4)
+
                 st.session_state.current_idx += 1
+                st.session_state.hint_stage = 0
+
+
                 if st.session_state.current_idx >= len(st.session_state.quiz_pool):
-                    # 🔥 여기서 한 번만 실제 DataFrame 반영
-                    df = st.session_state.full_df
-                    # 🔥 구글시트 저장은 단 1번
                     save_data(df)
                     st.session_state.quiz_state = "report"
+
                 st.rerun()
-            # 🔥🔥🔥 강제 포커스 + 모바일 키보드 유지 (가장 안정적 방식)
-            st.components.v1.html(f"""
-            <script>
-            function focusInput() {{
-                const parentDoc = window.parent.document;
-                const inputs = parentDoc.querySelectorAll('input[type="text"]');
-                if (inputs.length > 0) {{
-                    const target = inputs[inputs.length - 1];
-                    target.focus();
-                    target.click();
-                    // 커서를 맨 뒤로 이동
-                    const len = target.value.length;
-                    target.setSelectionRange(len, len);
-                }}
-            }}
-            // 여러 번 시도 (모바일 대응)
-            setTimeout(focusInput, 100);
-            setTimeout(focusInput, 400);
-            setTimeout(focusInput, 800);
-            setTimeout(focusInput, 1200);
-            </script>
-            """, height=0)
+
+
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        # =========================
+        # 🔥 자동 포커스 + Enter 자동 제출
+        # =========================
+        st.components.v1.html("""
+        <script>
+        const parentDoc = window.parent.document;
+
+        function focusLatestInput() {
+            const inputs = parentDoc.querySelectorAll('input[type="text"]');
+            if (inputs.length > 0) {
+                const input = inputs[inputs.length - 1];
+                input.focus();
+
+                // 커서를 맨 뒤로 이동
+                const val = input.value;
+                input.value = '';
+                input.value = val;
+            }
+        }
+
+        function enableEnterSubmitOnce() {
+            const inputs = parentDoc.querySelectorAll('input[type="text"]');
+            if (inputs.length > 0) {
+                const input = inputs[inputs.length - 1];
+
+                if (!input.dataset.enterBound) {
+                    input.dataset.enterBound = "true";
+
+                    input.addEventListener("keydown", function(e) {
+                        if (e.key === "Enter") {
+                            e.preventDefault();
+                            const buttons = parentDoc.querySelectorAll('button[kind="primary"]');
+                            if (buttons.length > 0) {
+                                buttons[buttons.length - 1].click();
+                            }
+                        }
+                    });
+                }
+            }
+        }
+
+        // 모바일 키보드 대응 (viewport 재조정)
+        function adjustForKeyboard() {
+            window.scrollTo(0, document.body.scrollHeight);
+        }
+
+        setTimeout(focusLatestInput, 200);
+        setTimeout(enableEnterSubmitOnce, 300);
+        setTimeout(adjustForKeyboard, 400);
+
+        </script>
+        """, height=0)
+
+
     
     elif st.session_state.quiz_state == "report":
         st.subheader("📋 Quiz Report")
