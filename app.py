@@ -35,6 +35,35 @@ def mask_phrase(sentence, phrase):
 # [2] OpenAI API
 api_key = st.secrets.get("OPENAI_API_KEY", "").strip()
 client = OpenAI(api_key=api_key)
+
+# 콘텐츠 생성 함수
+def generate_content(word):
+    prompt = f"""Provide an English definition and 10 high-quality, distinct example sentences for the word '{word}'.
+    RULES: 1. The word '{word}' MUST be included in EVERY sentence. 2. Each sentence must represent a different context. 3. The definition (DEF:) should NOT contain the word '{word}'.
+    Format: DEF: [definition] SENT: [sentence containing {word}] (total 10 SENT lines)"""
+    try:
+        for attempt in range(3):
+            response = client.chat.completions.create(
+                model="gpt-4o-mini", 
+                messages=[{"role": "system", "content": "You are a precise English lexicographer."},
+                          {"role": "user", "content": prompt}],
+                temperature=0.4
+            )
+            content = response.choices[0].message.content
+            if not content: continue
+            en_def_match = re.search(r"DEF:\s*(.*)", content)
+            en_def = en_def_match.group(1).strip() if en_def_match else ""
+            en_def = re.compile(re.escape(word), re.IGNORECASE).sub("*****", en_def)
+            raw_sentences = re.findall(r"SENT:\s*(.*)", content)
+            valid_sentences = [s.strip().replace('"', '') for s in raw_sentences if re.search(re.escape(word), s, re.IGNORECASE)]
+            if len(valid_sentences) >= 10: return en_def, valid_sentences[:10]
+            time.sleep(0.5)
+        while len(valid_sentences) < 10: valid_sentences.append(f"It is essential to maintain {word} in any challenging situation.")
+        return en_def, valid_sentences[:10]
+    except Exception as e:
+        st.error(f"🚨 GPT 오류: {e}")
+    return None, None
+
 # [3] 모바일 최적화 및 아이폰 15 프로 전용 가로 고정 CSS
 st.set_page_config(page_title="Haeil's Voca", layout="centered")
 
@@ -148,7 +177,7 @@ if st.session_state.menu == "QUIZ":
     # [1] 데이터 보존을 위한 변수 초기화 (최초 1회만)
     if "final_num" not in st.session_state: st.session_state.final_num = 10
     if "final_option" not in st.session_state: st.session_state.final_option = "Entire Range"
-    if "final_range" not in st.session_state: st.session_state.final_range = (1, total_words)
+    if "final_range" not in st.session_state: st.session_state.final_range = (total_words-50, total_words)
     # 콜백 함수들: 위젯이 바뀌는 즉시 'final' 변수에 값을 박제함
     def update_num(): st.session_state.final_num = st.session_state.tmp_num
     def update_option(): st.session_state.final_option = st.session_state.tmp_option
@@ -181,7 +210,7 @@ if st.session_state.menu == "QUIZ":
             safe_range = (max(1, min(low, total_words)), max(1, min(high, total_words)))
             
             st.slider(
-                "Select word range (by index)",
+                "Range Setting",
                 1, total_words,
                 value=safe_range,
                 key="tmp_range",
@@ -192,7 +221,7 @@ if st.session_state.menu == "QUIZ":
         else:
             start_idx = 0
             end_idx = total_words
-        st.subheader("🏁 Ready for Quiz?")
+        st.subheader("🏁 아 유 레뒤?")
         if st.button("START", use_container_width=True, type="primary"):
             st.session_state.hint_stage = 0
 
@@ -460,16 +489,116 @@ if st.session_state.menu == "QUIZ":
             if st.button("🔄 Retry", use_container_width=True):
                 st.session_state.quiz_state = "setup"
                 st.rerun()
-# --- [Voca 메뉴] 스와이프 삭제 대안 ---
+
+# --- [Voca 메뉴: 군더더기 없는 순정 한 줄 레이아웃] ---
 elif st.session_state.menu == "Voca":
     st.subheader("📚 Word Bank")
     df = load_data()
-    for idx, row in df.iterrows():
-        # 스와이프 대신 클릭 시 확장하여 삭제 버튼 노출 (모바일 최적화)
-        with st.expander(f"**{row['word']}** : {row['meaning']}"):
-            if st.button("🗑️ Delete this word", key=f"del_{idx}", use_container_width=True):
-                save_data(df.drop(idx))
-                st.rerun()
+
+    
+    if df.empty:
+        st.info("저장된 단어가 없습니다.")
+    else:
+        search_term = st.text_input("🔍 Search", "").strip().lower()
+        df['no'] = range(1, len(df) + 1)
+        
+        filtered_df = df[df['word'].str.lower().str.contains(search_term, na=False) | 
+                         df['meaning'].str.lower().str.contains(search_term, na=False)] if search_term else df
+
+        # 페이지 폭 확장 (반응형 줄바꿈 방지)
+        st.set_page_config(layout="wide")
+
+        for idx, row in filtered_df.iloc[::-1].iterrows():
+
+            with st.expander(f"#{row['no']}  **{row['word']}** : {row['meaning']}"):
+
+                confirm_key = f"del_confirm_{idx}"
+                if confirm_key not in st.session_state:
+                    st.session_state[confirm_key] = False
+
+                # ===============================
+                # 1️⃣ 예문 먼저 출력
+                # ===============================
+                def highlight(word, sentence):
+                    if pd.isna(sentence):
+                        return ""
+                    pattern = re.compile(re.escape(word), re.IGNORECASE)
+                    return pattern.sub(f"**{word}**", str(sentence))
+
+                st.markdown(
+                    f"""
+                    <div style="margin-top: 6px; border-top: 1px solid #eee; padding-top: 10px;">
+                        <p style="font-size: 0.75rem; color: #888; margin-bottom: 6px;">📖 Examples</p>
+                        <p style="font-size: 0.9rem;">1. {highlight(row['word'], row['s1'])}</p>
+                        <p style="font-size: 0.9rem;">2. {highlight(row['word'], row['s2'])}</p>
+                        <p style="font-size: 0.9rem;">3. {highlight(row['word'], row['s3'])}</p>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+
+                st.markdown("---")  # 버튼 위 구분선
+
+                # ===============================
+                # 2️⃣ 하단 버튼 영역
+                # ===============================
+
+                if not st.session_state[confirm_key]:
+
+                    col1, col2 = st.columns(2)
+
+                    speak_clicked = col1.button(
+                        "🔊 Pronounce",
+                        key=f"v_spk_{idx}",
+                        use_container_width=True
+                    )
+
+                    delete_clicked = col2.button(
+                        "🗑️ Delete",
+                        key=f"v_del_{idx}",
+                        use_container_width=True
+                    )
+
+                    # 🔊 발음
+                    if speak_clicked:
+                        safe_word = row['word'].replace("'", "\\'")
+                        st.components.v1.html(
+                            f"""
+                            <script>
+                                const u = new SpeechSynthesisUtterance('{safe_word}');
+                                window.speechSynthesis.speak(u);
+                            </script>
+                            """,
+                            height=0
+                        )
+
+                    # 🗑 삭제 클릭
+                    if delete_clicked:
+                        st.session_state[confirm_key] = True
+                        st.rerun()
+
+                # ===============================
+                # 3️⃣ 삭제 확인 UI
+                # ===============================
+                else:
+                    st.warning(f"Delete '{row['word']}'?")
+
+                    c1, c2 = st.columns(2)
+
+                    if c1.button("✅ Yes", key=f"y_confirm_{idx}", use_container_width=True):
+                        new_df = df.drop(idx).drop(columns=['no'])
+                        save_data(new_df)
+                        st.session_state[confirm_key] = False
+                        st.rerun()
+
+                    if c2.button("❌ No", key=f"n_cancel_{idx}", use_container_width=True):
+                        st.session_state[confirm_key] = False
+                        st.rerun()
+
+
+
+
+
 # --- [Stat 메뉴] 대시보드 (정수형) ---
 elif st.session_state.menu == "Stat":
     st.subheader("📊 Your Progress")
@@ -537,10 +666,21 @@ elif st.session_state.menu == "Stat":
         st.info("통계 데이터가 없습니다. 먼저 단어를 추가하고 퀴즈를 풀어보세요.")
 # --- [Add 메뉴] ---
 elif st.session_state.menu == "Add":
-    st.subheader("➕ New Word")
-    with st.form("add"):
-        w = st.text_input("Word")
-        m = st.text_input("Meaning")
-        if st.form_submit_button("Save"):
-            # (기존 OpenAI 예문 생성 및 저장 로직 포함)
-            st.success("Saved!")
+    with st.form("word_add_form", clear_on_submit=True):
+        word = st.text_input("영어 단어").strip()
+        meaning = st.text_input("뜻").strip()
+        if st.form_submit_button("단어 등록"):
+            if word and meaning:
+                df = load_data()
+                if word.lower() in df['word'].astype(str).str.lower().values:
+                    st.warning(f"⚠️ 이미 등록된 단어입니다.")
+                else:
+                    with st.spinner("AI 예문 생성 중..."):
+                        en_def, sentences = generate_content(word)
+                        if en_def:
+                            new_row = {"word": word, "meaning": meaning, "en_def": en_def, "count": 0, "mistakes": 0}
+                            for i in range(1, 11): new_row[f"s{i}"] = sentences[i-1]
+                            df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+                            save_data(df)
+                            st.success(f"🎉 '{word}' 저장 완료!")
+            
