@@ -279,12 +279,12 @@ if st.session_state.menu == "QUIZ":
         with col_hint_btn:
 
             if st.session_state.hint_stage == 0:
-                if st.button("💡힌트", key=f"hint_btn_{q_idx}"):
+                if st.button("💡Meaning", key=f"hint_btn_{q_idx}"):
                     st.session_state.hint_stage = 1
                     st.rerun()
 
             elif st.session_state.hint_stage == 1:
-                if st.button("🔤첫글자", key=f"hint_btn_{q_idx}"):
+                if st.button("🔤First Letter", key=f"hint_btn_{q_idx}"):
 
                     first_letter = row['word'].strip()[0]
 
@@ -474,39 +474,52 @@ elif st.session_state.menu == "Voca":
 elif st.session_state.menu == "Stat":
     st.subheader("📊 Your Progress")
     df = load_data()
+
     if not df.empty:
-        # 데이터 타입 강제 변환 (정수형)
+        # 데이터 타입 강제 변환
         df['count'] = pd.to_numeric(df['count'], errors='coerce').fillna(0).astype(int)
         df['mistakes'] = pd.to_numeric(df['mistakes'], errors='coerce').fillna(0).astype(int)
-        
+
         total_count = int(df['count'].sum())
         total_mistakes = int(df['mistakes'].sum())
-        
+
         col1, col2 = st.columns(2)
         col1.metric("총 단어 수", f"{len(df)}개")
-        
-        # 정답률 계산 (소수점 제거)
+
+        # 전체 정답률 계산
         if total_count > 0:
             correct_rate = int(((total_count - total_mistakes) / total_count) * 100)
         else:
             correct_rate = 100
-            
+
         col2.metric("전체 정답률", f"{correct_rate}%")
-        
-        st.subheader("🔥 오답률 높은 단어 (Top 20)")
-        # 오답률 계산 및 표시
-        df['rate'] = ((df['mistakes'] / df['count'].replace(0, 1)) * 100).fillna(0).astype(int)
-        bad_words = df[df['count'] > 0].sort_values('rate', ascending=False).head(20)
-        
-        if not bad_words.empty:
-            # 테이블 표시 시 숫자들을 정수로 변환하여 출력
-            st.table(bad_words[['word', 'meaning', 'count', 'mistakes']].assign(
-                count=bad_words['count'].astype(str),
-                mistakes=bad_words['mistakes'].astype(str)
-            ))
+
+        st.subheader("🔥 정답률 낮은 단어 (Top 20)")
+
+        # 🔥 단어별 정답률 계산
+        df['accuracy'] = (
+            ((df['count'] - df['mistakes']) / df['count'].replace(0, 1)) * 100
+        ).fillna(0)
+
+        # count가 0인 단어 제외
+        filtered = df[df['count'] > 0].copy()
+
+        # 🔥 정렬 조건
+        filtered = filtered.sort_values(
+            by=['accuracy', 'mistakes'],
+            ascending=[True, False]
+        ).head(20)
+
+        if not filtered.empty:
+            display_df = filtered[['word', 'meaning', 'accuracy']].copy()
+            display_df['accuracy'] = display_df['accuracy'].round(1).astype(str) + "%"
+
+            st.table(display_df)
         else:
             st.info("아직 퀴즈 데이터가 충분하지 않습니다.")
+
         st.divider()
+
         
         # --- 데이터 초기화 섹션 ---
         st.subheader("⚙️ 데이터 관리")
