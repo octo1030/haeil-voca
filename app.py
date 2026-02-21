@@ -514,27 +514,41 @@ elif st.session_state.menu == "Voca":
                     st.session_state[confirm_key] = False
 
                 # ===============================
-                # 1️⃣ 예문 먼저 출력
+                # 🔥 English Meaning 추가
                 # ===============================
-                def highlight(word, sentence):
-                    if pd.isna(sentence):
-                        return ""
-                    pattern = re.compile(re.escape(word), re.IGNORECASE)
-                    return pattern.sub(f"**{word}**", str(sentence))
+                if pd.notna(row.get("en_def", "")):
+                    st.markdown(
+                        f"""
+                        <div style="
+                            margin-top:6px;
+                            padding:10px;
+                            background:#f8f8f8;
+                            border-radius:10px;
+                            font-size:0.9rem;
+                            color:#333;">
+                            <strong>📘 English Meaning</strong><br>
+                            {row['en_def']}
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
 
+                # ===============================
+                # 🔥 예문 (highlight 제거)
+                # ===============================
                 st.markdown(
                     f"""
-                    <div style="margin-top: 6px; border-top: 1px solid #eee; padding-top: 10px;">
+                    <div style="margin-top: 10px; border-top: 1px solid #eee; padding-top: 10px;">
                         <p style="font-size: 0.75rem; color: #888; margin-bottom: 6px;">📖 Examples</p>
-                        <p style="font-size: 0.9rem;">1. {highlight(row['word'], row['s1'])}</p>
-                        <p style="font-size: 0.9rem;">2. {highlight(row['word'], row['s2'])}</p>
-                        <p style="font-size: 0.9rem;">3. {highlight(row['word'], row['s3'])}</p>
+                        <p style="font-size: 0.9rem;">1. {row['s1'] if pd.notna(row['s1']) else ''}</p>
+                        <p style="font-size: 0.9rem;">2. {row['s2'] if pd.notna(row['s2']) else ''}</p>
+                        <p style="font-size: 0.9rem;">3. {row['s3'] if pd.notna(row['s3']) else ''}</p>
                     </div>
                     """,
                     unsafe_allow_html=True
                 )
 
-                st.markdown("---")  # 버튼 위 구분선
+                st.markdown("---")
 
                 # ===============================
                 # 2️⃣ 하단 버튼 영역
