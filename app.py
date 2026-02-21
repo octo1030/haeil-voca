@@ -505,9 +505,6 @@ elif st.session_state.menu == "Voca":
         filtered_df = df[df['word'].str.lower().str.contains(search_term, na=False) | 
                          df['meaning'].str.lower().str.contains(search_term, na=False)] if search_term else df
 
-        # 페이지 폭 확장 (반응형 줄바꿈 방지)
-        st.set_page_config(layout="wide")
-
         for idx, row in filtered_df.iloc[::-1].iterrows():
 
             with st.expander(f"#{row['no']}  **{row['word']}** : {row['meaning']}"):
@@ -542,6 +539,24 @@ elif st.session_state.menu == "Voca":
                 # ===============================
                 # 2️⃣ 하단 버튼 영역
                 # ===============================
+                def generate_tts_audio(word):
+                    try:
+                        response = client.audio.speech.create(
+                            model="gpt-4o-mini-tts",
+                            voice="alloy",
+                            input=word
+                        )
+
+                        audio_path = f"/tmp/{word}.mp3"
+
+                        with open(audio_path, "wb") as f:
+                            f.write(response.read())
+
+                        return audio_path
+
+                    except Exception as e:
+                        print("TTS error:", e)
+                        return None
 
                 if not st.session_state[confirm_key]:
 
@@ -561,16 +576,51 @@ elif st.session_state.menu == "Voca":
 
                     # 🔊 발음
                     if speak_clicked:
-                        safe_word = row['word'].replace("'", "\\'")
-                        st.components.v1.html(
-                            f"""
-                            <script>
-                                const u = new SpeechSynthesisUtterance('{safe_word}');
-                                window.speechSynthesis.speak(u);
-                            </script>
-                            """,
-                            height=0
-                        )
+
+                        # 1️⃣ OpenAI TTS 먼저 시도
+                        audio_file = generate_tts_audio(row['word'])
+
+                        if audio_file:
+                            st.audio(audio_file)
+
+                        # 2️⃣ 실패 시 JS fallback
+                        else:
+                            safe_word = row['word'].replace("'", "\\'")
+
+                            st.components.v1.html(
+                                f"""
+                                <script>
+                                    const synth = window.speechSynthesis;
+
+                                    function speak() {{
+                                        synth.cancel();
+
+                                        const utter = new SpeechSynthesisUtterance('{safe_word}');
+                                        utter.lang = "en-US";
+                                        utter.rate = 0.95;
+                                        utter.pitch = 1.0;
+
+                                        function loadVoicesAndSpeak() {{
+                                            const voices = synth.getVoices();
+                                            const usVoice = voices.find(v => v.lang === "en-US");
+                                            if (usVoice) {{
+                                                utter.voice = usVoice;
+                                            }}
+                                            synth.speak(utter);
+                                        }}
+
+                                        if (synth.getVoices().length === 0) {{
+                                            synth.onvoiceschanged = loadVoicesAndSpeak;
+                                        }} else {{
+                                            loadVoicesAndSpeak();
+                                        }}
+                                    }}
+
+                                    speak();
+                                </script>
+                                """,
+                                height=0
+                            )
 
                     # 🗑 삭제 클릭
                     if delete_clicked:
